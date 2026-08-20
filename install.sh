@@ -83,6 +83,7 @@ sudo apt install -y \
     python3-pip python3-build python3-hatchling \
     libnotify-bin grim slurp wl-clipboard \
     fish brightnessctl ddcutil lm-sensors swappy \
+    papirus-icon-theme \
     libqalculate-dev libaubio-dev libiniparser-dev libfftw3-dev libsensors-dev
 
 ok "APT dependencies installed"
@@ -272,6 +273,18 @@ update_bashrc_var() {
 update_bashrc_var "PATH" "$QT_PREFIX/bin:\${PATH}"
 update_bashrc_var "LD_LIBRARY_PATH" "$QT_PREFIX/lib:\${LD_LIBRARY_PATH:-}"
 update_bashrc_var "QML_IMPORT_PATH" "$QT_PREFIX/qml:/usr/lib/qt6/qml"
+
+# Fix qt6ct icon theme if set to a missing theme (e.g. Tokyonight-Dark)
+if [[ -f ~/.config/qt6ct/qt6ct.conf ]]; then
+    current_icon_theme=$(grep "^icon_theme=" ~/.config/qt6ct/qt6ct.conf 2>/dev/null | cut -d= -f2)
+    if [[ -n "$current_icon_theme" ]] && [[ ! -d "/usr/share/icons/$current_icon_theme" ]] && [[ ! -d "$HOME/.icons/$current_icon_theme" ]] && [[ ! -d "$HOME/.local/share/icons/$current_icon_theme" ]]; then
+        warn "qt6ct icon theme '$current_icon_theme' not found, switching to Adwaita"
+        sed -i 's/^icon_theme=.*/icon_theme=Adwaita/' ~/.config/qt6ct/qt6ct.conf
+        ok "Set qt6ct icon_theme to Adwaita"
+    else
+        ok "qt6ct icon theme '$current_icon_theme' is available"
+    fi
+fi
 
 # Copy config files from this repo
 if [[ -f "$SCRIPT_DIR/config/shell.json" ]]; then

@@ -328,6 +328,67 @@ systemctl --user stop waybar.service 2>/dev/null || true
 systemctl --user stop ags.service 2>/dev/null || true
 ok "Waybar and AGS masked in systemd"
 
+# Patch JaKooLit theme/wallpaper scripts to restart caelestia instead of waybar
+if [[ -d ~/.config/hypr/scripts ]]; then
+    info "Patching JaKooLit Hyprland scripts for caelestia compatibility..."
+
+    SCRIPTS_DIR="$HOME/.config/hypr/scripts"
+
+    # Refresh.sh: replace restart_waybar with restart_caelestia
+    if [[ -f "$SCRIPTS_DIR/Refresh.sh" ]] && grep -q "restart_waybar" "$SCRIPTS_DIR/Refresh.sh"; then
+        sed -i '/# Restart waybar once/,/^restart_waybar$/c\
+# Restart caelestia shell (replaces waybar)\
+restart_caelestia() {\
+  pkill -x qs >/dev/null 2>&1 || true\
+  pkill -x quickshell >/dev/null 2>&1 || true\
+  sleep 0.2\
+  if pgrep -x qs >/dev/null 2>&1 || pgrep -x quickshell >/dev/null 2>&1; then\
+    pkill -9 -x qs >/dev/null 2>&1 || true\
+    pkill -9 -x quickshell >/dev/null 2>&1 || true\
+  fi\
+  sleep 0.2\
+  caelestia shell -d >/dev/null 2>&1 &\
+}\
+\
+restart_caelestia' "$SCRIPTS_DIR/Refresh.sh"
+        ok "Patched Refresh.sh"
+    fi
+
+    # DarkLight.sh: replace waybar kill with qs/quickshell
+    if [[ -f "$SCRIPTS_DIR/DarkLight.sh" ]] && grep -q "killall.*waybar" "$SCRIPTS_DIR/DarkLight.sh"; then
+        sed -i 's/for pid1 in waybar rofi swaync ags swaybg/for pid1 in qs quickshell rofi swaync ags swaybg/' "$SCRIPTS_DIR/DarkLight.sh"
+        ok "Patched DarkLight.sh"
+    fi
+
+    # ToggleWaybarTime.sh: make restart_waybar a no-op
+    if [[ -f "$SCRIPTS_DIR/ToggleWaybarTime.sh" ]]; then
+        sed -i 's/restart_waybar() {.*/restart_waybar() {\n  # Caelestia replaces waybar; no restart needed.\n  :\n}/; /pkill.*waybar/d; /pgrep.*waybar/d; /systemctl.*waybar/d; /waybar \u003e/d; /}#/d' "$SCRIPTS_DIR/ToggleWaybarTime.sh" 2>/dev/null || true
+        ok "Patched ToggleWaybarTime.sh"
+    fi
+
+    # WaybarStartup.sh: start caelestia instead
+    if [[ -f "$SCRIPTS_DIR/WaybarStartup.sh" ]] && grep -q "waybar" "$SCRIPTS_DIR/WaybarStartup.sh"; then
+        sed -i 's/waybar/caelestia shell -d/g' "$SCRIPTS_DIR/WaybarStartup.sh"
+        ok "Patched WaybarStartup.sh"
+    fi
+
+    # WaybarLayout.sh: disable waybar restarts
+    if [[ -f "$SCRIPTS_DIR/WaybarLayout.sh" ]]; then
+        sed -i 's/restart_waybar.*/# Disabled: using caelestia instead (waybar restart removed)/' "$SCRIPTS_DIR/WaybarLayout.sh"
+        sed -i 's/waybar-msg.*reload/# Disabled: using caelestia instead/' "$SCRIPTS_DIR/WaybarLayout.sh"
+        sed -i 's/pkill.*-SIGUSR2.*waybar/# Disabled: using caelestia instead/' "$SCRIPTS_DIR/WaybarLayout.sh"
+        ok "Patched WaybarLayout.sh"
+    fi
+
+    # HyprLayoutModule.sh: disable refresh_waybar
+    if [[ -f "$SCRIPTS_DIR/HyprLayoutModule.sh" ]]; then
+        sed -i 's/pkill -RTMIN+8 waybar/# Disabled: using caelestia instead/' "$SCRIPTS_DIR/HyprLayoutModule.sh"
+        ok "Patched HyprLayoutModule.sh"
+    fi
+
+    ok "JaKooLit scripts patched for caelestia"
+fi
+
 # Hyprland environment variable for QML_IMPORT_PATH
 if [[ -f ~/.config/hypr/hyprland.conf ]]; then
     if ! grep -q 'QML_IMPORT_PATH' ~/.config/hypr/hyprland.conf 2>/dev/null; then

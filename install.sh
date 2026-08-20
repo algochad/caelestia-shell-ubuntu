@@ -313,6 +313,21 @@ if [[ -f ~/.config/hypr/configs/Startup_Apps.conf ]]; then
     fi
 fi
 
+# Disable Waybar systemd autostart (JaKooLit/Hyprland-Dots enables it globally)
+WAYBAR_LINK="/etc/systemd/user/graphical-session.target.wants/waybar.service"
+if [[ -L "$WAYBAR_LINK" ]]; then
+    warn "Removing Waybar systemd autostart..."
+    sudo rm -f "$WAYBAR_LINK"
+    ok "Removed Waybar from systemd autostart"
+fi
+
+# Mask waybar and ags in user scope to prevent any accidental start
+systemctl --user mask waybar.service 2>/dev/null || true
+systemctl --user mask ags.service 2>/dev/null || true
+systemctl --user stop waybar.service 2>/dev/null || true
+systemctl --user stop ags.service 2>/dev/null || true
+ok "Waybar and AGS masked in systemd"
+
 # Hyprland environment variable for QML_IMPORT_PATH
 if [[ -f ~/.config/hypr/hyprland.conf ]]; then
     if ! grep -q 'QML_IMPORT_PATH' ~/.config/hypr/hyprland.conf 2>/dev/null; then

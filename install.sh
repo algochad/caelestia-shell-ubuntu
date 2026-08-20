@@ -73,6 +73,34 @@ else
     ok "Nerd Fonts installed"
 fi
 
+# ── Step 2b: Additional Fonts (Rubik, Material Symbols) ─────────────────────
+step "Installing Rubik and Material Symbols Rounded fonts"
+
+FONT_TMP="$(mktemp -d)"
+
+# Download Rubik Variable Font
+if ! fc-list | grep -qi "Rubik"; then
+    wget -q --show-progress -O "$FONT_TMP/Rubik.ttf" \
+        "https://github.com/google/fonts/raw/main/ofl/rubik/Rubik%5Bwght%5D.ttf"
+    cp "$FONT_TMP/Rubik.ttf" ~/.local/share/fonts/
+    ok "Rubik font installed"
+else
+    ok "Rubik font already installed, skipping"
+fi
+
+# Download Material Symbols Rounded Variable Font
+if ! fc-list | grep -qi "Material Symbols Rounded"; then
+    wget -q --show-progress -O "$FONT_TMP/MaterialSymbolsRounded.ttf" \
+        "https://github.com/google/material-design-icons/raw/master/variablefont/MaterialSymbolsRounded%5BFILL,GRAD,opsz,wght%5D.ttf"
+    cp "$FONT_TMP/MaterialSymbolsRounded.ttf" ~/.local/share/fonts/
+    ok "Material Symbols Rounded font installed"
+else
+    ok "Material Symbols Rounded font already installed, skipping"
+fi
+
+fc-cache -f
+rm -rf "$FONT_TMP"
+
 # ── Step 3: Build Quickshell ────────────────────────────────────────────────
 step "Step 3/7: Building Quickshell"
 
@@ -92,6 +120,7 @@ else
 fi
 
 cmake -GNinja -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+    -DCMAKE_PREFIX_PATH="/home/algochad/qt6.11/6.11.2/gcc_64" \
     -DCMAKE_INSTALL_PREFIX=/usr \
     -DCRASH_REPORTER=OFF \
     -DCRASH_HANDLER=OFF \
@@ -145,6 +174,11 @@ ok "Caelestia CLI installed"
 # ── Step 6: Build Caelestia Shell ───────────────────────────────────────────
 step "Step 6/7: Building Caelestia Shell"
 
+# Ensure Qt 6.11 is used for build
+export PATH="/home/algochad/qt6.11/6.11.2/gcc_64/bin:${PATH}"
+export LD_LIBRARY_PATH="/home/algochad/qt6.11/6.11.2/gcc_64/lib:${LD_LIBRARY_PATH}"
+export QML_IMPORT_PATH="/home/algochad/qt6.11/6.11.2/gcc_64/qml:/usr/lib/qt6/qml"
+
 mkdir -p ~/.config/quickshell
 
 SHELL_DIR="$HOME/.config/quickshell/caelestia"
@@ -170,8 +204,8 @@ ok "Caelestia Shell installed"
 step "Step 7/7: Setting up configuration"
 
 # QML_IMPORT_PATH in bashrc
-if ! grep -q 'QML_IMPORT_PATH=/usr/lib/qt6/qml' ~/.bashrc 2>/dev/null; then
-    echo 'export QML_IMPORT_PATH=/usr/lib/qt6/qml' >> ~/.bashrc
+if ! grep -q 'QML_IMPORT_PATH=' ~/.bashrc 2>/dev/null; then
+    echo 'export QML_IMPORT_PATH="/home/algochad/qt6.11/6.11.2/gcc_64/qml:/usr/lib/qt6/qml"' >> ~/.bashrc
     ok "Added QML_IMPORT_PATH to ~/.bashrc"
 else
     ok "QML_IMPORT_PATH already in ~/.bashrc"

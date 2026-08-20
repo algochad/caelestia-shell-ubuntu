@@ -326,6 +326,22 @@ if [[ -f ~/.config/hypr/configs/Startup_Apps.conf ]]; then
     fi
 fi
 
+# Add Qt 6.11 environment variables to Hyprland config so caelestia starts with correct paths
+USER_ENVVARS="$HOME/.config/hypr/UserConfigs/ENVariables.conf"
+if [[ -f "$USER_ENVVARS" ]]; then
+    if ! grep -q "QML_IMPORT_PATH.*qt6.11" "$USER_ENVVARS" 2>/dev/null; then
+        info "Adding Qt 6.11 env vars to Hyprland ENVariables.conf..."
+        sed -i '/^### QT Variables ###/i \\
+### Qt 6.11 (caelestia shell) ###\\
+env = QML_IMPORT_PATH,'"$QT_PREFIX"'/qml:/usr/lib/qt6/qml\\
+env = LD_LIBRARY_PATH,'"$QT_PREFIX"'/lib:${LD_LIBRARY_PATH}\\
+' "$USER_ENVVARS"
+        ok "Added Qt 6.11 env vars to Hyprland ENVariables.conf"
+    else
+        ok "Qt 6.11 env vars already in Hyprland ENVariables.conf"
+    fi
+fi
+
 # Disable Waybar systemd autostart (JaKooLit/Hyprland-Dots enables it globally)
 WAYBAR_LINK="/etc/systemd/user/graphical-session.target.wants/waybar.service"
 if [[ -L "$WAYBAR_LINK" ]]; then

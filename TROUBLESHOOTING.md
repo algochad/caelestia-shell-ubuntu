@@ -221,6 +221,24 @@ git commit -m "Initial commit"
 
 ---
 
+## Issue 11: Caelestia Not Auto-Starting After Logout/Reboot
+
+**Symptom:** `exec-once = caelestia shell -d` is in `UserConfigs/Startup_Apps.conf`, but after logout/login or reboot, the shell doesn't start. Must run manually.
+
+**Root Cause:** Hyprland doesn't inherit `QML_IMPORT_PATH` and `LD_LIBRARY_PATH` from `~/.bashrc`. When `caelestia shell -d` runs at Hyprland startup, it can't find the Qt 6.11 libraries or Caelestia QML modules, so it silently fails.
+
+**Fix:** Add Qt 6.11 environment variables to Hyprland config:
+
+```bash
+# In ~/.config/hypr/UserConfigs/ENVariables.conf, add:
+env = QML_IMPORT_PATH,/home/$USER/qt6.11/6.11.2/gcc_64/qml:/usr/lib/qt6/qml
+env = LD_LIBRARY_PATH,/home/$USER/qt6.11/6.11.2/gcc_64/lib:${LD_LIBRARY_PATH}
+```
+
+Now handled automatically by `install.sh`.
+
+---
+
 ## Environment Variables
 
 After install, these are added to `~/.bashrc`:

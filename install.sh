@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Caelestia Shell installer for Ubuntu 25.10
+# Caelestia Shell installer for Ubuntu 25.10/26.04
 # https://github.com/caelestia-dots/shell
 #
 # Prerequisites: Hyprland already installed (e.g. via JaKooLit/Ubuntu-Hyprland)
@@ -30,6 +30,10 @@ die() { err "$@"; exit 1; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="$HOME/caelestia-build"
+QT_INSTALL_DIR="$HOME/qt6.11"
+QT_VERSION="6.11.2"
+QT_ARCH="linux_gcc_64"
+QT_PREFIX="$QT_INSTALL_DIR/$QT_VERSION/$QT_ARCH"
 
 # ── Helper ───────────────────────────────────────────────────────────────────
 confirm() {
@@ -39,8 +43,35 @@ confirm() {
     return 1
 }
 
+# ── Step 0: Install Qt 6.11 ──────────────────────────────────────────────────
+step "Step 0/8: Installing Qt 6.11 (required for Caelestia Shell)"
+
+if [[ -d "$QT_PREFIX/bin" ]] && [[ -f "$QT_PREFIX/qml/QtQuick/Controls/Material/DoubleSpinBox.qml" ]]; then
+    ok "Qt $QT_VERSION already installed"
+else
+    info "Downloading Qt $QT_VERSION via aqtinstall..."
+
+    # Install aqtinstall into a temporary venv
+    AQT_VENV="$BUILD_DIR/.aqt-venv"
+    mkdir -p "$BUILD_DIR"
+    python3 -m venv "$AQT_VENV" --system-site-packages 2>/dev/null || python3 -m venv "$AQT_VENV"
+    "$AQT_VENV/bin/pip" install -q aqtinstall
+
+    "$AQT_VENV/bin/aqt" install-qt linux desktop "$QT_VERSION" "$QT_ARCH" \
+        -O "$QT_INSTALL_DIR" 2>&1 | tail -5
+
+    # Install required Qt modules
+    info "Installing Qt modules (shadertools, imageformats)..."
+    "$AQT_VENV/bin/aqt" install-qt linux desktop "$QT_VERSION" "$QT_ARCH" \
+        -O "$QT_INSTALL_DIR" -m qtshadertools 2>&1 | tail -3
+    "$AQT_VENV/bin/aqt" install-qt linux desktop "$QT_VERSION" "$QT_ARCH" \
+        -O "$QT_INSTALL_DIR" -m qtimageformats 2>&1 | tail -3
+
+    ok "Qt $QT_VERSION installed to $QT_INSTALL_DIR"
+fi
+
 # ── Step 1: APT dependencies ────────────────────────────────────────────────
-step "Step 1/7: Installing APT dependencies"
+step "Step 1/8: Installing APT dependencies"
 
 sudo apt update
 sudo apt install -y \
@@ -56,53 +87,48 @@ sudo apt install -y \
 
 ok "APT dependencies installed"
 
-# ── Step 2: Nerd Fonts ──────────────────────────────────────────────────────
-step "Step 2/7: Installing Nerd Fonts (CascadiaCode)"
+# ── Step 2: Fonts ────────────────────────────────────────────────────────────
+step "Step 2/8: Installing Fonts (CascadiaCode, Rubik, Material Symbols Rounded)"
 
+mkdir -p ~/.local/share/fonts
+FONT_TMP="$(mktemp -d)"
+
+# CascadiaCode Nerd Font
 if fc-list | grep -qi "CaskaydiaCove"; then
     ok "CascadiaCode Nerd Font already installed, skipping"
 else
-    mkdir -p ~/.local/share/fonts
-    FONT_TMP="$(mktemp -d)"
     wget -q --show-progress -O "$FONT_TMP/CascadiaCode.zip" \
         https://github.com/ryanoasis/nerd-fonts/releases/download/v3.3.0/CascadiaCode.zip
     unzip -qo "$FONT_TMP/CascadiaCode.zip" -d "$FONT_TMP/CascadiaCode"
     cp "$FONT_TMP"/CascadiaCode/*.ttf ~/.local/share/fonts/
-    fc-cache -f
-    rm -rf "$FONT_TMP"
-    ok "Nerd Fonts installed"
+    ok "CascadiaCode Nerd Font installed"
 fi
 
-# ── Step 2b: Additional Fonts (Rubik, Material Symbols) ─────────────────────
-step "Installing Rubik and Material Symbols Rounded fonts"
-
-FONT_TMP="$(mktemp -d)"
-
-# Download Rubik Variable Font
-if ! fc-list | grep -qi "Rubik"; then
+# Rubik Variable Font
+if fc-list | grep -qi "Rubik"; then
+    ok "Rubik font already installed, skipping"
+else
     wget -q --show-progress -O "$FONT_TMP/Rubik.ttf" \
         "https://github.com/google/fonts/raw/main/ofl/rubik/Rubik%5Bwght%5D.ttf"
     cp "$FONT_TMP/Rubik.ttf" ~/.local/share/fonts/
     ok "Rubik font installed"
-else
-    ok "Rubik font already installed, skipping"
 fi
 
-# Download Material Symbols Rounded Variable Font
-if ! fc-list | grep -qi "Material Symbols Rounded"; then
+# Material Symbols Rounded Variable Font
+if fc-list | grep -qi "Material Symbols Rounded"; then
+    ok "Material Symbols Rounded font already installed, skipping"
+else
     wget -q --show-progress -O "$FONT_TMP/MaterialSymbolsRounded.ttf" \
         "https://github.com/google/material-design-icons/raw/master/variablefont/MaterialSymbolsRounded%5BFILL,GRAD,opsz,wght%5D.ttf"
     cp "$FONT_TMP/MaterialSymbolsRounded.ttf" ~/.local/share/fonts/
     ok "Material Symbols Rounded font installed"
-else
-    ok "Material Symbols Rounded font already installed, skipping"
 fi
 
 fc-cache -f
 rm -rf "$FONT_TMP"
 
 # ── Step 3: Build Quickshell ────────────────────────────────────────────────
-step "Step 3/7: Building Quickshell"
+step "Step 3/8: Building Quickshell"
 
 mkdir -p "$BUILD_DIR"
 
@@ -119,9 +145,11 @@ else
     cd quickshell
 fi
 
+rm -rf build
 cmake -GNinja -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-    -DCMAKE_PREFIX_PATH="/home/algochad/qt6.11/6.11.2/gcc_64" \
+    -DCMAKE_PREFIX_PATH="$QT_PREFIX" \
     -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_INSTALL_RPATH="$QT_PREFIX/lib;/usr/lib/x86_64-linux-gnu" \
     -DCRASH_REPORTER=OFF \
     -DCRASH_HANDLER=OFF \
     -DINSTALL_QML_PREFIX=lib/qt6/qml
@@ -131,8 +159,8 @@ sudo cmake --install build
 
 ok "Quickshell installed"
 
-# ── Step 4: Build libcava ───────────────────────────────────────────────────
-step "Step 4/7: Building libcava (LukashonakV fork)"
+# ── Step 4: Build libcava ────────────────────────────────────────────────────
+step "Step 4/8: Building libcava (LukashonakV fork)"
 
 cd "$BUILD_DIR"
 if [[ -d libcava ]]; then
@@ -143,19 +171,23 @@ else
     cd libcava
 fi
 
-meson setup build --buildtype=release -Ddefault_library=shared --wipe 2>/dev/null \
+rm -rf build
+meson setup build --buildtype=release -Ddefault_library=shared 2>/dev/null \
     || meson setup build --buildtype=release -Ddefault_library=shared
 meson compile -C build
 sudo meson install -C build
 
 # Library path
-echo "/usr/local/lib/x86_64-linux-gnu" | sudo tee /etc/ld.so.conf.d/libcava.conf >/dev/null
-sudo ldconfig
+if [[ ! -f /etc/ld.so.conf.d/libcava.conf ]]; then
+    echo "/usr/local/lib/x86_64-linux-gnu" | sudo tee /etc/ld.so.conf.d/libcava.conf >/dev/null
+    sudo ldconfig
+    ok "libcava library path configured"
+fi
 
 ok "libcava installed"
 
-# ── Step 5: Install Caelestia CLI ───────────────────────────────────────────
-step "Step 5/7: Installing Caelestia CLI"
+# ── Step 5: Install Caelestia CLI ────────────────────────────────────────────
+step "Step 5/8: Installing Caelestia CLI"
 
 cd "$BUILD_DIR"
 if [[ -d caelestia-cli ]]; then
@@ -171,13 +203,13 @@ sudo pip3 install dist/*.whl --break-system-packages --force-reinstall
 
 ok "Caelestia CLI installed"
 
-# ── Step 6: Build Caelestia Shell ───────────────────────────────────────────
-step "Step 6/7: Building Caelestia Shell"
+# ── Step 6: Build Caelestia Shell ────────────────────────────────────────────
+step "Step 6/8: Building Caelestia Shell"
 
 # Ensure Qt 6.11 is used for build
-export PATH="/home/algochad/qt6.11/6.11.2/gcc_64/bin:${PATH}"
-export LD_LIBRARY_PATH="/home/algochad/qt6.11/6.11.2/gcc_64/lib:${LD_LIBRARY_PATH}"
-export QML_IMPORT_PATH="/home/algochad/qt6.11/6.11.2/gcc_64/qml:/usr/lib/qt6/qml"
+export PATH="$QT_PREFIX/bin:${PATH}"
+export LD_LIBRARY_PATH="$QT_PREFIX/lib:${LD_LIBRARY_PATH:-}"
+export QML_IMPORT_PATH="$QT_PREFIX/qml:/usr/lib/qt6/qml"
 
 mkdir -p ~/.config/quickshell
 
@@ -190,49 +222,102 @@ else
     cd "$SHELL_DIR"
 fi
 
+rm -rf build
 PKG_CONFIG_PATH="/usr/local/lib/x86_64-linux-gnu/pkgconfig:${PKG_CONFIG_PATH:-}" \
 cmake -B build -G Ninja \
+    -DCMAKE_PREFIX_PATH="$QT_PREFIX" \
     -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX=/
+    -DCMAKE_INSTALL_PREFIX=/ \
+    -DCMAKE_INSTALL_RPATH="$QT_PREFIX/lib;/usr/lib/x86_64-linux-gnu:$ORIGIN:$ORIGIN/../lib:$ORIGIN/lib"
 
 cmake --build build
 sudo cmake --install build
 
 ok "Caelestia Shell installed"
 
-# ── Step 7: Configuration ──────────────────────────────────────────────────
-step "Step 7/7: Setting up configuration"
+# ── Step 7: Replace stale /usr/local/bin/quickshell ──────────────────────────
+step "Step 7/8: Fixing quickshell binary paths"
 
-# QML_IMPORT_PATH in bashrc
-if ! grep -q 'QML_IMPORT_PATH=' ~/.bashrc 2>/dev/null; then
-    echo 'export QML_IMPORT_PATH="/home/algochad/qt6.11/6.11.2/gcc_64/qml:/usr/lib/qt6/qml"' >> ~/.bashrc
-    ok "Added QML_IMPORT_PATH to ~/.bashrc"
-else
-    ok "QML_IMPORT_PATH already in ~/.bashrc"
+# The old /usr/local/bin/quickshell (if installed by caelestia-cli) may be stale
+# Copy our rebuilt Qt 6.11 binary there too
+if [[ -f /usr/local/bin/quickshell ]]; then
+    if ! cmp -s /usr/bin/quickshell /usr/local/bin/quickshell 2>/dev/null; then
+        warn "Replacing stale /usr/local/bin/quickshell with rebuilt version..."
+        sudo cp /usr/bin/quickshell /usr/local/bin/quickshell
+        sudo chmod 755 /usr/local/bin/quickshell
+        ok "Updated /usr/local/bin/quickshell"
+    else
+        ok "/usr/local/bin/quickshell is already correct"
+    fi
 fi
+
+ok "Quickshell binaries verified"
+
+# ── Step 8: Configuration ──────────────────────────────────────────────────
+step "Step 8/8: Setting up configuration"
+
+# Environment variables in bashrc
+update_bashrc_var() {
+    local var_name="$1"
+    local var_value="$2"
+    if ! grep -q "^export $var_name=" ~/.bashrc 2>/dev/null; then
+        echo "export $var_name=\"$var_value\"" >> ~/.bashrc
+        ok "Added $var_name to ~/.bashrc"
+    else
+        sed -i "/^export $var_name=/c\export $var_name=\"$var_value\"" ~/.bashrc
+        ok "Updated $var_name in ~/.bashrc"
+    fi
+}
+
+update_bashrc_var "PATH" "$QT_PREFIX/bin:\${PATH}"
+update_bashrc_var "LD_LIBRARY_PATH" "$QT_PREFIX/lib:\${LD_LIBRARY_PATH:-}"
+update_bashrc_var "QML_IMPORT_PATH" "$QT_PREFIX/qml:/usr/lib/qt6/qml"
 
 # Copy config files from this repo
 if [[ -f "$SCRIPT_DIR/config/shell.json" ]]; then
     mkdir -p ~/.config/caelestia
-    cp -n "$SCRIPT_DIR/config/shell.json" ~/.config/caelestia/shell.json 2>/dev/null \
-        && ok "Copied shell.json to ~/.config/caelestia/" \
-        || warn "~/.config/caelestia/shell.json already exists, skipping (delete it first to overwrite)"
+    cp -f "$SCRIPT_DIR/config/shell.json" ~/.config/caelestia/shell.json
+    ok "Copied shell.json to ~/.config/caelestia/"
 fi
 
 if [[ -f "$SCRIPT_DIR/config/quickshell/qml_color.json" ]]; then
-    cp -n "$SCRIPT_DIR/config/quickshell/qml_color.json" ~/.config/quickshell/qml_color.json 2>/dev/null \
-        && ok "Copied qml_color.json to ~/.config/quickshell/" \
-        || warn "~/.config/quickshell/qml_color.json already exists, skipping"
+    cp -f "$SCRIPT_DIR/config/quickshell/qml_color.json" ~/.config/quickshell/qml_color.json
+    ok "Copied qml_color.json to ~/.config/quickshell/"
 fi
 
 # Wallpaper directory
 mkdir -p ~/Pictures/Wallpapers
+ok "Created ~/Pictures/Wallpapers/"
 
-# Hint about hyprland env
+# Hyprland configuration: disable Waybar/AGS, start caelestia
+if [[ -f ~/.config/hypr/configs/Startup_Apps.conf ]]; then
+    info "Configuring Hyprland startup..."
+
+    # Comment out old bar/waybar entries in the vendor config
+    sed -i 's/^exec-once = .*[Ww]aybar.*$/# Disabled by caelestia installer: using caelestia shell/' ~/.config/hypr/configs/Startup_Apps.conf 2>/dev/null || true
+    sed -i 's/^exec-once = .*ags.*$/# Disabled by caelestia installer: using caelestia shell/' ~/.config/hypr/configs/Startup_Apps.conf 2>/dev/null || true
+    sed -i 's/^exec-once = qs -c overview.*$/# Disabled by caelestia installer: using caelestia shell/' ~/.config/hypr/configs/Startup_Apps.conf 2>/dev/null || true
+
+    # Add caelestia to user startup config if not present
+    USER_STARTUP="$HOME/.config/hypr/UserConfigs/Startup_Apps.conf"
+    mkdir -p "$(dirname "$USER_STARTUP")"
+    touch "$USER_STARTUP"
+
+    if ! grep -q "caelestia shell" "$USER_STARTUP" 2>/dev/null; then
+        echo "" >> "$USER_STARTUP"
+        echo "# Caelestia Shell (installed by caelestia-shell-ubuntu)" >> "$USER_STARTUP"
+        echo "exec-once = caelestia shell -d" >> "$USER_STARTUP"
+        ok "Added caelestia shell to Hyprland startup"
+    else
+        ok "caelestia shell already in Hyprland startup"
+    fi
+fi
+
+# Hyprland environment variable for QML_IMPORT_PATH
 if [[ -f ~/.config/hypr/hyprland.conf ]]; then
     if ! grep -q 'QML_IMPORT_PATH' ~/.config/hypr/hyprland.conf 2>/dev/null; then
         warn "Add this line to ~/.config/hypr/hyprland.conf:"
-        echo "  env = QML_IMPORT_PATH,/usr/lib/qt6/qml"
+        echo "  env = QML_IMPORT_PATH,$QT_PREFIX/qml:/usr/lib/qt6/qml"
     else
         ok "QML_IMPORT_PATH already set in hyprland.conf"
     fi
@@ -249,10 +334,11 @@ echo ""
 echo -e "To start the shell manually:"
 echo -e "  ${CYAN}caelestia shell -d${NC}"
 echo ""
-echo -e "To auto-start with Hyprland, add to ${BOLD}~/.config/hypr/hyprland.conf${NC}:"
+echo -e "To auto-start with Hyprland:"
 echo -e "  ${CYAN}exec-once = caelestia shell -d${NC}"
 echo ""
 echo -e "Add wallpapers to ${BOLD}~/Pictures/Wallpapers/${NC}"
 echo -e "Edit shell config at ${BOLD}~/.config/caelestia/shell.json${NC}"
 echo ""
-echo -e "${YELLOW}NOTE: Open a new terminal or run 'source ~/.bashrc' to load QML_IMPORT_PATH.${NC}"
+echo -e "${YELLOW}NOTE: Open a new terminal or run 'source ~/.bashrc' to load environment.${NC}"
+echo -e "${YELLOW}NOTE: Logout/login or restart Hyprland for startup changes to take effect.${NC}"

@@ -10,11 +10,21 @@ One-shot installer for [Caelestia Shell](https://github.com/caelestia-dots/shell
 
 ## Quick Install
 
+### Local clone
+
 ```bash
 git clone https://github.com/algochad/caelestia-shell-ubuntu.git
 cd caelestia-shell-ubuntu
 ./install.sh
 ```
+
+### One-shot curl | bash
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/algochad/caelestia-shell-ubuntu/master/install.sh | bash
+```
+
+The script uses `sudo` internally for apt/system installs; it will prompt for your password on first use. Do not run it as root (`./install.sh` bails out if run as root).
 
 The script will:
 1. Download Qt 6.11.2 via `aqtinstall` (required — Ubuntu ships Qt 6.10 which lacks `DoubleSpinBox`)

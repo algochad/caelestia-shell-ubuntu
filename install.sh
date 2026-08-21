@@ -5,6 +5,23 @@
 #
 # Prerequisites: Hyprland already installed (e.g. via JaKooLit/Ubuntu-Hyprland)
 #
+# Can be run locally or via curl:
+#   curl -fsSL https://raw.githubusercontent.com/algochad/caelestia-shell-ubuntu/master/install.sh | bash
+#
+
+# If this script is being piped (curl | bash), clone the repo and re-run locally
+# so that SCRIPT_DIR and config/ files are available.
+if [[ -z "${BASH_SOURCE[0]:-}" ]] || [[ ! -f "${BASH_SOURCE[0]}" ]]; then
+    REPO_URL="https://github.com/algochad/caelestia-shell-ubuntu.git"
+    TMP_DIR="$(mktemp -d)"
+    echo "[INFO] Running via curl | bash; cloning repository..."
+    if ! git clone --depth 1 "$REPO_URL" "$TMP_DIR"; then
+        echo "[ERROR] Failed to clone $REPO_URL" >&2
+        exit 1
+    fi
+    cd "$TMP_DIR"
+    exec ./install.sh "$@"
+fi
 
 set -euo pipefail
 

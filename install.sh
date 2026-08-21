@@ -360,10 +360,10 @@ unbind = $mainMod, SPACE
 bindd = SUPER, SPACE, Open caelestia launcher, exec, caelestia shell drawers toggle launcher
 
 # Toggle session menu
-bindd = SUPER SHIFT, E, Toggle session menu, global, caelestia:session
+bindd = SUPER SHIFT, E, Toggle session menu, exec, caelestia shell drawers toggle session
 
 # Lock screen
-bindd = SUPER, L, Lock screen, global, caelestia:lock
+bindd = SUPER, L, Lock screen, exec, caelestia shell lock lock
 EOF
         ok "Added caelestia keybinds to UserKeybinds.conf"
     else

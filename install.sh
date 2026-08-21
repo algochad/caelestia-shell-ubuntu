@@ -72,8 +72,79 @@ append_bashrc_path() {
     fi
 }
 
-# ── Step 0: Install Qt 6.11 ──────────────────────────────────────────────────
-step "Step 0/15: Installing Qt 6.11 (required for Caelestia Shell)"
+# ── Step 0: Install Hyprland ────────────────────────────────────────────────
+step "Step 0/16: Installing Hyprland"
+
+if command -v Hyprland &>/dev/null || command -v hyprland &>/dev/null || dpkg -l | grep -qw hyprland; then
+    ok "Hyprland already installed"
+else
+    info "Installing Hyprland and companion packages..."
+
+    # Detect Ubuntu version
+    UBUNTU_VERSION="unknown"
+    if [[ -f /etc/os-release ]]; then
+        # shellcheck disable=SC1091
+        . /etc/os-release
+        UBUNTU_VERSION="${VERSION_ID:-unknown}"
+    fi
+
+    info "Detected Ubuntu $UBUNTU_VERSION"
+
+    # Common dependencies for the Wayland/Hyprland stack
+    sudo apt update
+    sudo apt install -y \
+        software-properties-common \
+        build-essential cmake git pkg-config meson ninja-build \
+        libwayland-dev wayland-protocols libwayland-client0 \
+        libxkbcommon-dev libxkbcommon-x11-dev \
+        libxcb-util-dev libxcb-icccm4-dev libxcb-cursor-dev libxcb-keysyms1-dev \
+        libxcb-randr0-dev libxcb-render-util0-dev libxcb-xfixes0-dev libxcb-xinerama0-dev \
+        libxcb-res0-dev libxcb-composite0-dev libxcb-ewmh-dev \
+        libegl-dev libegl1-mesa-dev libdrm-dev libgbm-dev \
+        libinput-dev libudev-dev libseat-dev libdisplay-info-dev libliftoff-dev \
+        libpixman-1-dev libtomlplusplus-dev libpango1.0-dev libgdk-pixbuf-2.0-dev \
+        libcairo2-dev libxcursor-dev \
+        xwayland xdg-desktop-portal xdg-desktop-portal-gtk \
+        kitty polkit-kde-agent-1 \
+        || warn "Some dependency packages could not be installed; continuing"
+
+    # Install Hyprland stack
+    if [[ "$UBUNTU_VERSION" == "26.04" ]]; then
+        info "Ubuntu 26.04 detected; installing Hyprland from Ubuntu repositories"
+        # Remove old community PPA if present to avoid conflicts
+        if grep -R "^deb .*cppiber.*hyprland" /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null | grep -q .; then
+            info "Removing old cppiber/hyprland PPA"
+            sudo add-apt-repository -r -y ppa:cppiber/hyprland 2>/dev/null || true
+            sudo rm -f /etc/apt/sources.list.d/*cppiber*hyprland*.list 2>/dev/null || true
+            sudo apt update
+        fi
+        sudo apt install -y \
+            hyprland hypridle hyprlock hyprpaper hyprpicker waybar \
+            hyprwayland-scanner hyprland-qtutils xdg-desktop-portal-hyprland \
+            || warn "Some Hyprland packages could not be installed"
+    else
+        info "Installing Hyprland from community PPA for Ubuntu $UBUNTU_VERSION"
+        sudo add-apt-repository -y ppa:cppiber/hyprland
+        sudo apt update
+        sudo apt install -y \
+            hyprland hypridle hyprlock hyprpaper hyprpicker waybar \
+            hyprwayland-scanner hyprland-qtutils xdg-desktop-portal-hyprland \
+            || warn "Some Hyprland packages could not be installed"
+    fi
+fi
+
+# Ensure user is in the input group (needed for Waybar keyboard-state, etc.)
+if ! groups "$(whoami)" | grep -q '\binput\b'; then
+    info "Adding user to input group..."
+    sudo groupadd -f input
+    sudo usermod -aG input "$(whoami)"
+    ok "Added user to input group (requires re-login to take effect)"
+else
+    ok "User already in input group"
+fi
+
+# ── Step 1: Install Qt 6.11 ──────────────────────────────────────────────────
+step "Step 1/16: Installing Qt 6.11 (required for Caelestia Shell)"
 
 if [[ -d "$QT_PREFIX/bin" ]] && [[ -f "$QT_PREFIX/qml/QtQuick/Controls/Material/DoubleSpinBox.qml" ]]; then
     ok "Qt $QT_VERSION already installed"
@@ -119,8 +190,8 @@ export PATH="$QT_PREFIX/bin:${PATH}"
 export LD_LIBRARY_PATH="$QT_PREFIX/lib:$HOME/.local/lib:${LD_LIBRARY_PATH:-}"
 export QML_IMPORT_PATH="$QT_PREFIX/qml:/usr/lib/qt6/qml"
 
-# ── Step 1: APT dependencies ────────────────────────────────────────────────
-step "Step 1/15: Installing APT dependencies"
+# ── Step 2: APT dependencies ────────────────────────────────────────────────
+step "Step 2/16: Installing APT dependencies"
 
 sudo apt update
 info "Installing APT dependencies (some may conflict on custom systems — continuing anyway)..."
@@ -236,8 +307,8 @@ export C_INCLUDE_PATH="$HOME/.local/include:${C_INCLUDE_PATH:-}"
 
 ok "APT dependencies installed"
 
-# ── Step 2: Fonts ────────────────────────────────────────────────────────────
-step "Step 2/15: Installing Fonts (CascadiaCode, Rubik, Material Symbols Rounded)"
+# ── Step 3: Fonts ────────────────────────────────────────────────────────────
+step "Step 3/16: Installing Fonts (CascadiaCode, Rubik, Material Symbols Rounded)"
 
 mkdir -p ~/.local/share/fonts
 FONT_TMP="$(mktemp -d)"
@@ -276,8 +347,8 @@ fi
 fc-cache -f
 rm -rf "$FONT_TMP"
 
-# ── Step 3: Build Quickshell ────────────────────────────────────────────────
-step "Step 3/15: Building Quickshell"
+# ── Step 4: Build Quickshell ────────────────────────────────────────────────
+step "Step 4/16: Building Quickshell"
 
 mkdir -p "$BUILD_DIR"
 
@@ -309,8 +380,8 @@ sudo cmake --install build
 
 ok "Quickshell installed"
 
-# ── Step 4: Build libcava ────────────────────────────────────────────────────
-step "Step 4/15: Building libcava (LukashonakV fork)"
+# ── Step 5: Build libcava ────────────────────────────────────────────────────
+step "Step 5/16: Building libcava (LukashonakV fork)"
 
 cd "$BUILD_DIR"
 if [[ -d libcava ]]; then
@@ -336,8 +407,8 @@ fi
 
 ok "libcava installed"
 
-# ── Step 5: Install Caelestia CLI ────────────────────────────────────────────
-step "Step 5/15: Installing Caelestia CLI"
+# ── Step 6: Install Caelestia CLI ────────────────────────────────────────────
+step "Step 6/16: Installing Caelestia CLI"
 
 cd "$BUILD_DIR"
 if [[ -d caelestia-cli ]]; then
@@ -359,8 +430,8 @@ sudo pip3 install dist/*.whl --break-system-packages --force-reinstall
 
 ok "Caelestia CLI installed"
 
-# ── Step 6: Build Caelestia Shell ────────────────────────────────────────────
-step "Step 6/15: Building Caelestia Shell"
+# ── Step 7: Build Caelestia Shell ────────────────────────────────────────────
+step "Step 7/16: Building Caelestia Shell"
 
 mkdir -p ~/.config/quickshell
 
@@ -387,8 +458,8 @@ sudo cmake --install build
 
 ok "Caelestia Shell installed"
 
-# ── Step 7: Replace stale /usr/local/bin/quickshell ──────────────────────────
-step "Step 7/15: Fixing quickshell binary paths"
+# ── Step 8: Replace stale /usr/local/bin/quickshell ──────────────────────────
+step "Step 8/16: Fixing quickshell binary paths"
 
 # The old /usr/local/bin/quickshell (if installed by caelestia-cli) may be stale
 # Copy our rebuilt Qt 6.11 binary there too
@@ -405,8 +476,8 @@ fi
 
 ok "Quickshell binaries verified"
 
-# ── Step 8: Configuration ──────────────────────────────────────────────────
-step "Step 8/15: Setting up configuration"
+# ── Step 9: Configuration ──────────────────────────────────────────────────
+step "Step 9/16: Setting up configuration"
 
 # Environment variables in bashrc
 update_bashrc_var() {
@@ -692,8 +763,8 @@ fi
 
 ok "Configuration complete"
 
-# ── Step 9: Install mise ─────────────────────────────────────────────────────
-step "Step 9/15: Installing mise"
+# ── Step 10: Install mise ─────────────────────────────────────────────────────
+step "Step 10/16: Installing mise"
 
 if command -v mise &>/dev/null; then
     ok "mise already installed ($(mise --version 2>/dev/null || echo unknown))"
@@ -715,8 +786,8 @@ if [[ -f "$HOME/.local/bin/mise" ]] && ! grep -q 'mise activate bash' ~/.bashrc 
     ok "Added mise activation to ~/.bashrc"
 fi
 
-# ── Step 10: Install Oh My Bash ─────────────────────────────────────────────
-step "Step 10/15: Installing Oh My Bash"
+# ── Step 11: Install Oh My Bash ─────────────────────────────────────────────
+step "Step 11/16: Installing Oh My Bash"
 
 if [[ -d "$HOME/.oh-my-bash" ]]; then
     ok "Oh My Bash already installed"
@@ -730,8 +801,8 @@ else
     fi
 fi
 
-# ── Step 11: Install Bun ──────────────────────────────────────────────────────
-step "Step 11/15: Installing Bun"
+# ── Step 12: Install Bun ──────────────────────────────────────────────────────
+step "Step 12/16: Installing Bun"
 
 if command -v bun &>/dev/null; then
     ok "Bun already installed ($(bun --version 2>/dev/null || echo unknown))"
@@ -746,8 +817,8 @@ else
 fi
 append_bashrc_path "$HOME/.bun/bin"
 
-# ── Step 12: Install Oh My Pi (omp) ───────────────────────────────────────────
-step "Step 12/15: Installing Oh My Pi (omp)"
+# ── Step 13: Install Oh My Pi (omp) ───────────────────────────────────────────
+step "Step 13/16: Installing Oh My Pi (omp)"
 
 if command -v omp &>/dev/null; then
     ok "omp already installed ($(omp --version 2>/dev/null || echo unknown))"
@@ -761,8 +832,8 @@ else
     fi
 fi
 
-# ── Step 13: Install Docker Engine ────────────────────────────────────────────
-step "Step 13/15: Installing Docker Engine"
+# ── Step 14: Install Docker Engine ────────────────────────────────────────────
+step "Step 14/16: Installing Docker Engine"
 
 if command -v docker &>/dev/null; then
     ok "Docker already installed ($(docker --version 2>/dev/null || echo unknown))"
@@ -788,8 +859,8 @@ EOF
     ok "Docker Engine installed and user added to docker group"
 fi
 
-# ── Step 14: Install lazydocker ─────────────────────────────────────────────
-step "Step 14/15: Installing lazydocker"
+# ── Step 15: Install lazydocker ─────────────────────────────────────────────
+step "Step 15/16: Installing lazydocker"
 
 if command -v lazydocker &>/dev/null; then
     ok "lazydocker already installed ($(lazydocker --version 2>/dev/null | head -1 || echo unknown))"
@@ -805,8 +876,8 @@ else
 fi
 append_bashrc_path "$HOME/.local/bin"
 
-# ── Step 15: Install VS Code ──────────────────────────────────────────────────
-step "Step 15/15: Installing Visual Studio Code"
+# ── Step 16: Install VS Code ──────────────────────────────────────────────────
+step "Step 16/16: Installing Visual Studio Code"
 
 if command -v code &>/dev/null; then
     ok "VS Code already installed ($(code --version 2>/dev/null | head -1 || echo unknown))"

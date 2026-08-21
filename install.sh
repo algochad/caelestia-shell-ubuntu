@@ -342,6 +342,35 @@ env = LD_LIBRARY_PATH,'"$QT_PREFIX"'/lib:${LD_LIBRARY_PATH}\\
     fi
 fi
 
+# Add caelestia keybinds to Hyprland user keybinds config
+USER_KEYBINDS="$HOME/.config/hypr/UserConfigs/UserKeybinds.conf"
+if [[ -f "$USER_KEYBINDS" ]]; then
+    if ! grep -q "caelestia.*launcher" "$USER_KEYBINDS" 2>/dev/null; then
+        info "Adding caelestia keybinds to UserKeybinds.conf..."
+        cat >> "$USER_KEYBINDS" << 'EOF'
+
+##############
+# Caelestia  #
+##############
+
+# Unbind JaKooLit's togglefloating on Super+Space (rebound to caelestia launcher)
+unbind = $mainMod, SPACE
+
+# Toggle launcher on Super+Space via IPC
+bindd = SUPER, SPACE, Open caelestia launcher, exec, caelestia shell ipc call drawers toggle launcher
+
+# Toggle session menu
+bindd = SUPER SHIFT, E, Toggle session menu, global, caelestia:session
+
+# Lock screen
+bindd = SUPER, L, Lock screen, global, caelestia:lock
+EOF
+        ok "Added caelestia keybinds to UserKeybinds.conf"
+    else
+        ok "Caelestia keybinds already in UserKeybinds.conf"
+    fi
+fi
+
 # Disable Waybar systemd autostart (JaKooLit/Hyprland-Dots enables it globally)
 WAYBAR_LINK="/etc/systemd/user/graphical-session.target.wants/waybar.service"
 if [[ -L "$WAYBAR_LINK" ]]; then

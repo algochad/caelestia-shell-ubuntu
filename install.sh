@@ -274,6 +274,19 @@ update_bashrc_var "PATH" "$QT_PREFIX/bin:\${PATH}"
 update_bashrc_var "LD_LIBRARY_PATH" "$QT_PREFIX/lib:\${LD_LIBRARY_PATH:-}"
 update_bashrc_var "QML_IMPORT_PATH" "$QT_PREFIX/qml:/usr/lib/qt6/qml"
 
+# ── Caelestia Shell terminal info display (fastfetch-style) ──
+if [[ -f "$SCRIPT_DIR/config/caelestia-info.sh" ]]; then
+    CAELESTIA_INFO_SNIPPET="# ── Caelestia Shell Info Display ──\nsource $SCRIPT_DIR/config/caelestia-info.sh"
+    if ! grep -q "caelestia-info.sh" ~/.bashrc 2>/dev/null; then
+        echo "" >> ~/.bashrc
+        echo "# ── Caelestia Shell Info Display ──" >> ~/.bashrc
+        echo "source $SCRIPT_DIR/config/caelestia-info.sh" >> ~/.bashrc
+        ok "Added caelestia terminal info display to ~/.bashrc"
+    else
+        ok "caelestia terminal info display already in ~/.bashrc"
+    fi
+fi
+
 # Fix qt6ct icon theme if set to a missing theme (e.g. Tokyonight-Dark)
 if [[ -f ~/.config/qt6ct/qt6ct.conf ]]; then
     current_icon_theme=$(grep "^icon_theme=" ~/.config/qt6ct/qt6ct.conf 2>/dev/null | cut -d= -f2)
@@ -291,6 +304,17 @@ if [[ -f "$SCRIPT_DIR/config/shell.json" ]]; then
     mkdir -p ~/.config/caelestia
     cp -f "$SCRIPT_DIR/config/shell.json" ~/.config/caelestia/shell.json
     ok "Copied shell.json to ~/.config/caelestia/"
+fi
+
+# ── FIX: Ensure smartScheme is disabled (prevents wallpaper from overriding manual dark/light mode) ──
+USER_SHELL_JSON="$HOME/.config/caelestia/shell.json"
+if [[ -f "$USER_SHELL_JSON" ]]; then
+    if grep -q '"smartScheme": true' "$USER_SHELL_JSON" 2>/dev/null; then
+        sed -i 's/"smartScheme": true/"smartScheme": false/' "$USER_SHELL_JSON"
+        ok "Disabled smartScheme in shell.json (prevents wallpaper from overriding dark/light mode)"
+    else
+        ok "smartScheme already disabled or not present"
+    fi
 fi
 
 if [[ -f "$SCRIPT_DIR/config/quickshell/qml_color.json" ]]; then
@@ -345,6 +369,16 @@ fi
 # Add caelestia keybinds to Hyprland user keybinds config
 USER_KEYBINDS="$HOME/.config/hypr/UserConfigs/UserKeybinds.conf"
 if [[ -f "$USER_KEYBINDS" ]]; then
+    KEYBINDS_CHANGED=false
+
+    # ── FIX: Update old broken IPC syntax (drawers toggle → drawers.toggle) ──
+    if grep -q "drawers toggle" "$USER_KEYBINDS" 2>/dev/null; then
+        sed -i 's/drawers toggle/drawers.toggle/g' "$USER_KEYBINDS"
+        ok "Fixed IPC syntax in UserKeybinds.conf (drawers toggle → drawers.toggle)"
+        KEYBINDS_CHANGED=true
+    fi
+
+    # Add caelestia keybinds block if not present at all
     if ! grep -q "caelestia.*launcher" "$USER_KEYBINDS" 2>/dev/null; then
         info "Adding caelestia keybinds to UserKeybinds.conf..."
         cat >> "$USER_KEYBINDS" << 'EOF'
@@ -357,17 +391,31 @@ if [[ -f "$USER_KEYBINDS" ]]; then
 unbind = $mainMod, SPACE
 
 # Toggle launcher on Super+Space via IPC
-bindd = SUPER, SPACE, Open caelestia launcher, exec, caelestia shell drawers toggle launcher
+bindd = SUPER, SPACE, Open caelestia launcher, exec, caelestia shell drawers.toggle launcher
+
+# Toggle nexus (caelestia settings)
+bindd = SUPER, N, Open caelestia nexus, exec, caelestia shell nexus open
 
 # Toggle session menu
-bindd = SUPER SHIFT, E, Toggle session menu, exec, caelestia shell drawers toggle session
+bindd = SUPER SHIFT, E, Toggle session menu, exec, caelestia shell drawers.toggle session
 
 # Lock screen
 bindd = SUPER, L, Lock screen, exec, caelestia shell lock lock
 EOF
         ok "Added caelestia keybinds to UserKeybinds.conf"
+        KEYBINDS_CHANGED=true
     else
         ok "Caelestia keybinds already in UserKeybinds.conf"
+    fi
+
+    # ── FIX: Add nexus keybind if missing ──
+    if ! grep -q "caelestia nexus" "$USER_KEYBINDS" 2>/dev/null; then
+        info "Adding nexus keybind to UserKeybinds.conf..."
+        # Insert nexus keybind after the launcher keybind
+        sed -i '/bindd = SUPER, SPACE, Open caelestia launcher/a \
+# Toggle nexus (caelestia settings)\nbindd = SUPER, N, Open caelestia nexus, exec, caelestia shell nexus open' "$USER_KEYBINDS"
+        ok "Added nexus keybind (Super+N) to UserKeybinds.conf"
+        KEYBINDS_CHANGED=true
     fi
 fi
 

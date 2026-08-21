@@ -274,13 +274,30 @@ update_bashrc_var "PATH" "$QT_PREFIX/bin:\${PATH}"
 update_bashrc_var "LD_LIBRARY_PATH" "$QT_PREFIX/lib:\${LD_LIBRARY_PATH:-}"
 update_bashrc_var "QML_IMPORT_PATH" "$QT_PREFIX/qml:/usr/lib/qt6/qml"
 
-# ── Caelestia Shell terminal info display (fastfetch-style) ──
-if [[ -f "$SCRIPT_DIR/config/caelestia-info.sh" ]]; then
-    CAELESTIA_INFO_SNIPPET="# ── Caelestia Shell Info Display ──\nsource $SCRIPT_DIR/config/caelestia-info.sh"
-    if ! grep -q "caelestia-info.sh" ~/.bashrc 2>/dev/null; then
+# ── Caelestia Shell terminal info display (fastfetch-style via Python) ──
+if [[ -f "$SCRIPT_DIR/config/caelestia-fetch.py" ]]; then
+    # Copy Python script to caelestia config dir
+    if [[ ! -d "$HOME/.config/caelestia" ]]; then
+        mkdir -p "$HOME/.config/caelestia"
+    fi
+    cp "$SCRIPT_DIR/config/caelestia-fetch.py" "$HOME/.config/caelestia/caelestia-fetch.py"
+    ok "Installed caelestia-fetch.py"
+
+    # Update bashrc to use the Python script
+    # Remove old caelestia-info.sh references first
+    if grep -q "caelestia-info.sh" ~/.bashrc 2>/dev/null; then
+        sed -i '/caelestia-info.sh/d' ~/.bashrc
+        sed -i '/# ── Caelestia Shell Info Display ──/d' ~/.bashrc
+        ok "Removed old caelestia-info.sh from ~/.bashrc"
+    fi
+
+    # Add new Python-based display
+    if ! grep -q "caelestia-fetch.py" ~/.bashrc 2>/dev/null; then
         echo "" >> ~/.bashrc
         echo "# ── Caelestia Shell Info Display ──" >> ~/.bashrc
-        echo "source $SCRIPT_DIR/config/caelestia-info.sh" >> ~/.bashrc
+        echo "if command -v caelestia \u0026\u003e /dev/null \u0026\u0026 [[ -f ~/.config/caelestia/caelestia-fetch.py ]]; then" >> ~/.bashrc
+        echo "    python3 ~/.config/caelestia/caelestia-fetch.py" >> ~/.bashrc
+        echo "fi" >> ~/.bashrc
         ok "Added caelestia terminal info display to ~/.bashrc"
     else
         ok "caelestia terminal info display already in ~/.bashrc"

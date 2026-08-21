@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Caelestia Shell Info Display
-Fastfetch-style: Ubuntu logo beside Hardware+Software, then Caelestia logo beside Uptime+Caelestia.
+Fastfetch-style terminal header with Ubuntu + Caelestia logos.
 """
 
 import os
@@ -28,6 +28,7 @@ def main():
     c_bri = ansi(228, 225, 230)
     c_org = ansi(233, 84, 32)     # Ubuntu
     c_cya = ansi(100, 200, 255)   # Caelestia
+    c_grn = ansi(80,  200, 120)   # accent
     rst = "\033[0m"
 
     # ── Caelestia info ──
@@ -51,14 +52,64 @@ def main():
     uptime    = (run("uptime -p 2>/dev/null | sed 's/up //'")
                  or run("uptime | sed 's/.*up \\([^,]*\\),.*/\\1/'"))
     shell_name = os.path.basename(os.environ.get("SHELL", "bash"))
-    cpu_info  = run(
+
+    # ── CPU details ──
+    cpu_model = run(
         "grep 'model name' /proc/cpuinfo 2>/dev/null | head -1 | "
         "cut -d: -f2 | sed 's/^ *//; s/  */ /g; s/(R)//g; s/(TM)//g; "
-        "s/ CPU @//g; s/ GHz/ GHz/' | cut -c1-35")
-    mem_info  = run("free -h 2>/dev/null | awk '/^Mem:/{print $3 \"/\" $2}'")
+        "s/ CPU @//g; s/ GHz/ GHz/' | cut -c1-40")
+    cpu_cores = run("nproc 2>/dev/null") or "?"
+    cpu_max   = run(
+        "lscpu 2>/dev/null | grep 'CPU max MHz' | awk '{printf \"%.2f\", $4/1000}'") or \
+                run("grep 'cpu MHz' /proc/cpuinfo 2>/dev/null | head -1 | "
+                    "cut -d: -f2 | awk '{printf \"%.2f\", $1/1000}'") or "?"
+    # Compact CPU line: "Intel Core i7-8565U (8c @ 4.60GHz)"
+    cpu_short = re.sub(r'Intel Core i\d-', 'i', cpu_model)  # "i7-8565U"
+    cpu_info  = f"{cpu_short} ({cpu_cores}c @ {cpu_max}GHz)"
+
+    # ── GPU info ──
+    gpu_raw = run("lspci 2>/dev/null | grep -i 'vga\\|3d\\|display' | head -1")
+    if gpu_raw:
+        # Strip PCI ID prefix, remove "Corporation", extract bracket name
+        gpu_clean = re.sub(r'^\S+\s+\S+\s+controller:\s*', '', gpu_raw)
+        gpu_clean = re.sub(r'\bCorporation\b', '', gpu_clean)
+        m = re.search(r'\[([^\]]+)\]', gpu_clean)
+        gpu_name = m.group(1).strip() if m else gpu_clean.strip()
+        if 'Intel' in gpu_raw:
+            gpu_info = f"Intel {gpu_name}"
+        elif 'NVIDIA' in gpu_raw or 'GeForce' in gpu_raw or 'RTX' in gpu_raw:
+            gpu_info = f"NVIDIA {gpu_name}"
+        elif 'AMD' in gpu_raw or 'Radeon' in gpu_raw:
+            gpu_info = f"AMD {gpu_name}"
+        else:
+            gpu_info = gpu_name
+        gpu_info = gpu_info[:55]
+    else:
+        gpu_info = "Intel UHD Graphics 620"
+
+    # ── Memory ──
+    mem_info = run("free -h 2>/dev/null | awk '/^Mem:/{print $3 \"/\" $2}'")
+
+    # ── zram (used / total) ──
+    zram_info = ""
+    zram_raw = run("zramctl --noheadings 2>/dev/null | head -1 | awk '{print $4 \"/\" $3}'")
+    if zram_raw:
+        zram_info = f"zram {zram_raw}"
+
+    # ── disk swap (used / total) ──
+    swap_info = ""
+    swap_raw = run("free -h 2>/dev/null | awk '/^Swap:/{print $3 \"/\" $2}'")
+    if swap_raw and swap_raw != "0B/0B":
+        swap_info = f"swap {swap_raw}"
+
+    # ── Disk (root partition) ──
     disk_info = run(
         "df -h / 2>/dev/null | tail -1 | "
         "awk '{print $3 \"/\" $2 \" (\" $5 \")\"}'")
+
+    # ── Combine memory line ──
+    parts = [p for p in [mem_info, zram_info, swap_info] if p]
+    mem_swap = " | ".join(parts)
 
     # ── Box-drawing ──
     tl, tr, bl, br, hz = "┌", "┐", "└", "┘", "─"
@@ -79,32 +130,33 @@ def main():
         "           '''  ''''           ",
     ]
 
-    # ── Caelestia diamond (9 lines) ──
+    # ── Caelestia celestial diamond ──
     CA = [
         "               .               ",
-        "             .:::              ",
-        "           .::::::             ",
-        "         .::::::::::.          ",
-        "       .::::::**::::::.        ",
-        "         ::::::::::::          ",
-        "           ::::::::            ",
-        "             :::::             ",
-        "               :               ",
+        "             .::::.            ",
+        "           .::::::::.          ",
+        "         .::::::::::::.        ",
+        "       .::::::::::::::::.      ",
+        "         ::::::::::::::        ",
+        "           ::::::::::          ",
+        "             ::::::            ",
+        "               ::              ",
     ]
 
     def fmt(icon, key, val, ck=c_sec, cv=c_bri):
         return f" {icon}  {ck}{key}{rst}  {cv}{val}{rst}"
 
-    def border(title, w=48):
+    def border(title, w=54):
         return f"{c_sec}{tl}{hz}{title}{hz * (w - len(title) - 2)}{tr}{rst}"
 
-    def bottom(w=48):
+    def bottom(w=54):
         return f"{c_sec}{bl}{hz * (w - 2)}{br}{rst}"
 
     # ── Build sections ──
     hw = [
-        fmt("", "CPU",    cpu_info,  c_pri, c_bri),
-        fmt("󰍛", "Memory", mem_info,  c_pri, c_bri),
+        fmt("", "CPU", cpu_info, c_pri, c_bri),
+        fmt("󰢮", "GPU", gpu_info, c_pri, c_bri),
+        fmt("󰍛", "Memory", mem_swap, c_pri, c_bri),
         fmt("󰋊", "Disk",   disk_info, c_pri, c_bri),
     ]
     sw = [
@@ -133,11 +185,13 @@ def main():
     ]
 
     # ── Layout 1: Ubuntu logo + Hardware + Software ──
-    right1 = [border("Hardware")] + hw + [bottom()] + [border("Software")] + sw + [bottom()]
+    right1 = [border("Hardware")] + hw + [bottom()] + \
+             [border("Software")] + sw + [bottom()]
     total1 = max(len(UB), len(right1))
 
     # ── Layout 2: Caelestia logo + Uptime + Caelestia ──
-    right2 = [border("Uptime / Age / DT")] + up + [bottom()] + [border("Caelestia")] + ca + [bottom()]
+    right2 = [border("Uptime / Age / DT")] + up + [bottom()] + \
+             [border("Caelestia")] + ca + [bottom()]
     total2 = max(len(CA), len(right2))
 
     # ── Render block 1: Ubuntu ──

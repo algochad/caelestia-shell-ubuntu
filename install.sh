@@ -35,6 +35,9 @@ QT_VERSION="6.11.2"
 QT_ARCH="linux_gcc_64"
 QT_PREFIX="$QT_INSTALL_DIR/$QT_VERSION/gcc_64"
 
+# Ensure tools installed to ~/.local/bin are discoverable in this session
+export PATH="$HOME/.local/bin:$PATH"
+
 # ── Helper ───────────────────────────────────────────────────────────────────
 confirm() {
     echo -e "${YELLOW}$1${NC}"
@@ -43,8 +46,17 @@ confirm() {
     return 1
 }
 
+# Append a directory to PATH in ~/.bashrc if not already present
+append_bashrc_path() {
+    local dir="$1"
+    if ! grep -q "^export PATH=.*${dir}" ~/.bashrc 2>/dev/null; then
+        echo "export PATH=\"${dir}:\${PATH}\"" >> ~/.bashrc
+        ok "Added ${dir} to PATH in ~/.bashrc"
+    fi
+}
+
 # ── Step 0: Install Qt 6.11 ──────────────────────────────────────────────────
-step "Step 0/8: Installing Qt 6.11 (required for Caelestia Shell)"
+step "Step 0/15: Installing Qt 6.11 (required for Caelestia Shell)"
 
 if [[ -d "$QT_PREFIX/bin" ]] && [[ -f "$QT_PREFIX/qml/QtQuick/Controls/Material/DoubleSpinBox.qml" ]]; then
     ok "Qt $QT_VERSION already installed"
@@ -91,7 +103,7 @@ export LD_LIBRARY_PATH="$QT_PREFIX/lib:$HOME/.local/lib:${LD_LIBRARY_PATH:-}"
 export QML_IMPORT_PATH="$QT_PREFIX/qml:/usr/lib/qt6/qml"
 
 # ── Step 1: APT dependencies ────────────────────────────────────────────────
-step "Step 1/8: Installing APT dependencies"
+step "Step 1/15: Installing APT dependencies"
 
 sudo apt update
 info "Installing APT dependencies (some may conflict on custom systems — continuing anyway)..."
@@ -208,7 +220,7 @@ export C_INCLUDE_PATH="$HOME/.local/include:${C_INCLUDE_PATH:-}"
 ok "APT dependencies installed"
 
 # ── Step 2: Fonts ────────────────────────────────────────────────────────────
-step "Step 2/8: Installing Fonts (CascadiaCode, Rubik, Material Symbols Rounded)"
+step "Step 2/15: Installing Fonts (CascadiaCode, Rubik, Material Symbols Rounded)"
 
 mkdir -p ~/.local/share/fonts
 FONT_TMP="$(mktemp -d)"
@@ -248,7 +260,7 @@ fc-cache -f
 rm -rf "$FONT_TMP"
 
 # ── Step 3: Build Quickshell ────────────────────────────────────────────────
-step "Step 3/8: Building Quickshell"
+step "Step 3/15: Building Quickshell"
 
 mkdir -p "$BUILD_DIR"
 
@@ -281,7 +293,7 @@ sudo cmake --install build
 ok "Quickshell installed"
 
 # ── Step 4: Build libcava ────────────────────────────────────────────────────
-step "Step 4/8: Building libcava (LukashonakV fork)"
+step "Step 4/15: Building libcava (LukashonakV fork)"
 
 cd "$BUILD_DIR"
 if [[ -d libcava ]]; then
@@ -308,7 +320,7 @@ fi
 ok "libcava installed"
 
 # ── Step 5: Install Caelestia CLI ────────────────────────────────────────────
-step "Step 5/8: Installing Caelestia CLI"
+step "Step 5/15: Installing Caelestia CLI"
 
 cd "$BUILD_DIR"
 if [[ -d caelestia-cli ]]; then
@@ -331,7 +343,7 @@ sudo pip3 install dist/*.whl --break-system-packages --force-reinstall
 ok "Caelestia CLI installed"
 
 # ── Step 6: Build Caelestia Shell ────────────────────────────────────────────
-step "Step 6/8: Building Caelestia Shell"
+step "Step 6/15: Building Caelestia Shell"
 
 mkdir -p ~/.config/quickshell
 
@@ -359,7 +371,7 @@ sudo cmake --install build
 ok "Caelestia Shell installed"
 
 # ── Step 7: Replace stale /usr/local/bin/quickshell ──────────────────────────
-step "Step 7/8: Fixing quickshell binary paths"
+step "Step 7/15: Fixing quickshell binary paths"
 
 # The old /usr/local/bin/quickshell (if installed by caelestia-cli) may be stale
 # Copy our rebuilt Qt 6.11 binary there too
@@ -377,7 +389,7 @@ fi
 ok "Quickshell binaries verified"
 
 # ── Step 8: Configuration ──────────────────────────────────────────────────
-step "Step 8/8: Setting up configuration"
+step "Step 8/15: Setting up configuration"
 
 # Environment variables in bashrc
 update_bashrc_var() {
@@ -663,10 +675,150 @@ fi
 
 ok "Configuration complete"
 
+# ── Step 9: Install mise ─────────────────────────────────────────────────────
+step "Step 9/15: Installing mise"
+
+if command -v mise &>/dev/null; then
+    ok "mise already installed ($(mise --version 2>/dev/null || echo unknown))"
+else
+    info "Installing mise via official installer..."
+    curl https://mise.run | MISE_QUIET=1 sh
+    if [[ -x "$HOME/.local/bin/mise" ]]; then
+        ok "mise installed to ~/.local/bin/mise"
+    else
+        warn "mise installer ran but binary not found at ~/.local/bin/mise"
+    fi
+fi
+
+# Ensure mise is activated in ~/.bashrc
+if [[ -f "$HOME/.local/bin/mise" ]] && ! grep -q 'mise activate bash' ~/.bashrc 2>/dev/null; then
+    echo "" >> ~/.bashrc
+    echo "# ── Mise activation ──" >> ~/.bashrc
+    echo 'eval "$(~/.local/bin/mise activate bash)"' >> ~/.bashrc
+    ok "Added mise activation to ~/.bashrc"
+fi
+
+# ── Step 10: Install Oh My Bash ─────────────────────────────────────────────
+step "Step 10/15: Installing Oh My Bash"
+
+if [[ -d "$HOME/.oh-my-bash" ]]; then
+    ok "Oh My Bash already installed"
+else
+    info "Installing Oh My Bash..."
+    bash -c "$(curl -fsSL https://raw.githubusercontent.com/ohmybash/oh-my-bash/master/tools/install.sh)" -- --unattended || warn "Oh My Bash installer exited non-zero; continuing"
+    if [[ -d "$HOME/.oh-my-bash" ]]; then
+        ok "Oh My Bash installed"
+    else
+        warn "Oh My Bash install may have failed"
+    fi
+fi
+
+# ── Step 11: Install Bun ──────────────────────────────────────────────────────
+step "Step 11/15: Installing Bun"
+
+if command -v bun &>/dev/null; then
+    ok "Bun already installed ($(bun --version 2>/dev/null || echo unknown))"
+else
+    info "Installing Bun via official installer..."
+    curl -fsSL https://bun.sh/install | bash
+    if [[ -x "$HOME/.bun/bin/bun" ]]; then
+        ok "Bun installed to ~/.bun/bin/bun"
+    else
+        warn "Bun install may have failed"
+    fi
+fi
+append_bashrc_path "$HOME/.bun/bin"
+
+# ── Step 12: Install Oh My Pi (omp) ───────────────────────────────────────────
+step "Step 12/15: Installing Oh My Pi (omp)"
+
+if command -v omp &>/dev/null; then
+    ok "omp already installed ($(omp --version 2>/dev/null || echo unknown))"
+else
+    info "Installing omp via official installer..."
+    curl -fsSL https://omp.sh/install | sh
+    if command -v omp &>/dev/null; then
+        ok "omp installed"
+    else
+        warn "omp install may have failed; you may need to open a new shell"
+    fi
+fi
+
+# ── Step 13: Install Docker Engine ────────────────────────────────────────────
+step "Step 13/15: Installing Docker Engine"
+
+if command -v docker &>/dev/null; then
+    ok "Docker already installed ($(docker --version 2>/dev/null || echo unknown))"
+else
+    info "Adding Docker apt repository..."
+    sudo apt install -y ca-certificates curl
+    sudo install -m 0755 -d /etc/apt/keyrings
+    sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+    sudo chmod a+r /etc/apt/keyrings/docker.asc
+    sudo tee /etc/apt/sources.list.d/docker.sources >/dev/null <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/ubuntu
+Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
+Components: stable
+Architectures: $(dpkg --print-architecture)
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+    sudo apt update
+    info "Installing Docker Engine packages..."
+    sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+    sudo systemctl enable --now docker
+    sudo usermod -aG docker "$(whoami)"
+    ok "Docker Engine installed and user added to docker group"
+fi
+
+# ── Step 14: Install lazydocker ─────────────────────────────────────────────
+step "Step 14/15: Installing lazydocker"
+
+if command -v lazydocker &>/dev/null; then
+    ok "lazydocker already installed ($(lazydocker --version 2>/dev/null | head -1 || echo unknown))"
+else
+    info "Installing lazydocker via official install script..."
+    mkdir -p "$HOME/.local/bin"
+    bash -c "$(curl -fsSL https://raw.githubusercontent.com/jesseduffield/lazydocker/master/scripts/install_update_linux.sh)"
+    if command -v lazydocker &>/dev/null; then
+        ok "lazydocker installed"
+    else
+        warn "lazydocker installed to ~/.local/bin but not on PATH yet; open a new shell"
+    fi
+fi
+append_bashrc_path "$HOME/.local/bin"
+
+# ── Step 15: Install VS Code ──────────────────────────────────────────────────
+step "Step 15/15: Installing Visual Studio Code"
+
+if command -v code &>/dev/null; then
+    ok "VS Code already installed ($(code --version 2>/dev/null | head -1 || echo unknown))"
+else
+    info "Adding Microsoft apt repository for VS Code..."
+    sudo apt install -y wget gpg
+    wget -qO- https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor -o /usr/share/keyrings/microsoft.gpg
+    sudo tee /etc/apt/sources.list.d/vscode.sources >/dev/null <<EOF
+Types: deb
+URIs: https://packages.microsoft.com/repos/code
+Suites: stable
+Components: main
+Architectures: amd64,arm64,armhf
+Signed-By: /usr/share/keyrings/microsoft.gpg
+EOF
+    sudo apt update
+    info "Installing VS Code..."
+    sudo apt install -y code
+    if command -v code &>/dev/null; then
+        ok "VS Code installed"
+    else
+        warn "VS Code install may have failed"
+    fi
+fi
+
 # ── Done ────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}${BOLD}  Caelestia Shell installation complete!${NC}"
+echo -e "${GREEN}${BOLD}  Caelestia Shell + dev environment installation complete!${NC}"
 echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════${NC}"
 echo ""
 echo -e "To start the shell manually:"

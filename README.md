@@ -27,6 +27,13 @@ The script will:
 8. Disable Waybar/AGS systemd autostart and patch JaKooLit scripts
 9. Add Qt 6.11 environment to `~/.bashrc`
 10. Configure Hyprland to auto-start `caelestia shell -d`
+11. Install [mise](https://mise.jdx.dev) (dev tool / env manager)
+12. Install [Oh My Bash](https://ohmybash.nntoan.com) (if not already present)
+13. Install [Bun](https://bun.sh)
+14. Install [Oh My Pi (omp)](https://omp.sh)
+15. Install [Docker Engine](https://docker.com) and add your user to the `docker` group
+16. Install [lazydocker](https://github.com/jesseduffield/lazydocker)
+17. Install [Visual Studio Code](https://code.visualstudio.com)
 
 After install, **logout/login** (or `hyprctl dispatch exit`) for Hyprland to pick up the startup changes.
 

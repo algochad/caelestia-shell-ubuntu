@@ -357,7 +357,7 @@ if [[ -f "$USER_KEYBINDS" ]]; then
 unbind = $mainMod, SPACE
 
 # Toggle launcher on Super+Space via IPC
-bindd = SUPER, SPACE, Open caelestia launcher, exec, caelestia shell ipc call drawers toggle launcher
+bindd = SUPER, SPACE, Open caelestia launcher, exec, caelestia shell drawers toggle launcher
 
 # Toggle session menu
 bindd = SUPER SHIFT, E, Toggle session menu, global, caelestia:session

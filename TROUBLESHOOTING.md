@@ -256,6 +256,29 @@ env = QML_IMPORT_PATH,/home/$USER/qt6.11/6.11.2/gcc_64/qml:/usr/lib/qt6/qml
 
 ---
 
+## Issue 12: Super+Space Launcher Stops Working
+
+**Symptom:** The caelestia launcher keybind (`Super+Space`) stops opening the launcher, even though the bind appears in Hyprland.
+
+**Root Cause:** The caelestia IPC message format is space-separated, not dot-separated. A previous installer patch incorrectly changed:
+```
+caelestia shell drawers toggle launcher
+```
+to:
+```
+caelestia shell drawers.toggle launcher
+```
+The dotted form is **not** a valid IPC target/function separator, so Hyprland dispatches the exec but caelestia rejects the message.
+
+**Fix:** Use the space-separated IPC form in `~/.config/hypr/UserConfigs/UserKeybinds.conf`:
+```
+bindd = SUPER, SPACE, Open caelestia launcher, exec, caelestia shell drawers toggle launcher
+```
+
+`install.sh` now adds the correct form and migrates any existing `drawers.toggle` entries back to `drawers toggle`.
+
+---
+
 ## For Next Agent / Next Machine
 
 1. Clone this repo on the target machine

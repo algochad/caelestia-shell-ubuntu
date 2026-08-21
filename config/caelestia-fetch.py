@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
 Caelestia Shell Info Display
-Fastfetch-style terminal header with Ubuntu ASCII + Caelestia half-block logo.
+Fastfetch-style terminal header with high-res ASCII art logos.
 """
 
 import os
 import re
+import shutil
 import subprocess
 
 
@@ -17,124 +18,46 @@ def run(cmd):
         return ""
 
 
-def ansi_fg(r, g, b):
-    return f"\033[38;2;{r};{g};{b}m"
-
-
-def ansi_bg(r, g, b):
-    return f"\033[48;2;{r};{g};{b}m"
-
-
-def render_halfblocks(png_path, target_h=13, target_w=28):
-    """Render PNG as terminal half-blocks with 24-bit color."""
+def load_logo(path, color, default=None):
+    """Load an ASCII logo from file and colorize non-space characters."""
     try:
-        from PIL import Image
-    except ImportError:
-        return None
-
-    try:
-        img = Image.open(png_path).convert("RGBA")
+        with open(os.path.expanduser(path), encoding="utf-8") as f:
+            lines = f.read().splitlines()
     except Exception:
-        return None
+        lines = (default or "").splitlines()
 
-    # Crop to content
-    bbox = img.getbbox()
-    if bbox:
-        img = img.crop(bbox)
+    # Trim trailing whitespace, keep leading whitespace for positioning
+    lines = [line.rstrip() for line in lines]
 
-    # Scale: each char is 2 pixels tall, so height * 2
-    calc_h = target_h * 2
-    aspect = img.width / img.height
-    calc_w = min(int(calc_h * aspect), target_w * 2)
+    # Drop empty leading/trailing lines
+    while lines and not lines[0]:
+        lines.pop(0)
+    while lines and not lines[-1]:
+        lines.pop()
 
-    img = img.resize((calc_w, calc_h), Image.Resampling.LANCZOS)
-
-    ALPHA = 40
-    TERM_BG = (12, 14, 18)
-    LOWER = "▄"  # foreground = bottom pixel color
-
-    lines = []
-    for row in range(0, calc_h - 1, 2):
-        chars = []
-        for col in range(calc_w):
-            top = img.getpixel((col, row))
-            bot = img.getpixel((col, row + 1))
-            ta, ba = top[3], bot[3]
-
-            # Both transparent → space
-            if ta <= ALPHA and ba <= ALPHA:
-                chars.append(" ")
-                continue
-
-            # Top transparent, bottom visible → use bottom color as fg
-            if ta <= ALPHA:
-                r, g, b = bot[:3]
-                chars.append(f"{ansi_fg(r, g, b)}▄\033[0m")
-                continue
-
-            # Bottom transparent, top visible → use top color as bg
-            if ba <= ALPHA:
-                r, g, b = top[:3]
-                chars.append(f"{ansi_bg(r, g, b)} \033[0m")
-                continue
-
-            # Both visible → half-block with fg=bottom, bg=top
-            tr, tg, tb = top[:3]
-            br, bg_, bb = bot[:3]
-            chars.append(
-                f"{ansi_fg(br, bg_, bb)}{ansi_bg(tr, tg, tb)}▄\033[0m"
-            )
-
-        lines.append("".join(chars))
-
-    # Pad/center to target_w (measured in visible chars)
-    result = []
+    # Colorize every non-space character
+    colored = []
     for line in lines:
-        # Strip ANSI to measure visible length
-        plain = re.sub(r'\x1b\[[0-9;]*m', '', line)
-        vis_len = len(plain)
-        if vis_len < target_w:
-            pad = (target_w - vis_len) // 2
-            result.append(" " * pad + line)
-        else:
-            result.append(line)
-    return result
+        colored.append("".join(
+            f"{color}{ch}{'\033[0m'}" if ch != " " else ch
+            for ch in line
+        ))
+    return colored
 
 
-def get_logo():
-    """Get Caelestia logo as terminal half-blocks."""
-    svg_bright = "/home/algochad/.config/caelestia/logo_bright.svg"
-    png_path = "/tmp/logo_bright_small.png"
-
-    # Ensure bright SVG exists
-    if not os.path.exists(svg_bright):
-        return None
-
-    # Generate PNG
-    try:
-        subprocess.run(
-            ["convert", "-background", "none", "-resize", "200x200",
-             svg_bright, png_path],
-            check=True, capture_output=True, timeout=5
-        )
-    except Exception:
-        return None
-
-    # Render as half-blocks
-    lines = render_halfblocks(png_path, target_h=13, target_w=28)
-    return lines
+def visual_width(s):
+    """Approximate display width ignoring ANSI SGR codes."""
+    return len(re.sub(r'\x1b\[[0-9;]*m', '', s))
 
 
 def main():
-    # ── Colors ──
     c_pri = "\033[38;2;180;199;237m"
     c_sec = "\033[38;2;168;171;185m"
     c_bri = "\033[38;2;228;225;230m"
-    c_org = "\033[38;2;233;84;32m"      # Ubuntu
-    c_cya = "\033[38;2;125;211;252m"   # Caelestia cyan
+    c_org = "\033[38;2;255;107;53m"      # Ubuntu orange
+    c_cya = "\033[38;2;125;211;252m"     # Caelestia cyan
     rst = "\033[0m"
 
-    # ── Caelestia info ──
     raw = run("caelestia scheme get 2>/dev/null")
     clean = re.sub(r'\x1b\[[0-9;]*m', '', raw)
 
@@ -149,23 +72,19 @@ def main():
     wall_line      = run("caelestia wallpaper 2>/dev/null | head -1")
     wall_display   = os.path.basename(wall_line) if wall_line else "default"
 
-    # ── System info ──
     os_name   = run("lsb_release -d 2>/dev/null | cut -f2") or "Ubuntu 26.04 LTS"
     kernel    = run("uname -r")
     uptime    = (run("uptime -p 2>/dev/null | sed 's/up //'")
-                 or run("uptime | sed 's/.*up \\([^,]*\\),.*/\\1/'"))
+                 or run(r"uptime | sed 's/.*up \([^,]*\),.*/\1/'"))
     shell_name = os.path.basename(os.environ.get("SHELL", "bash"))
 
-    # ── Host ──
     host_name = run("cat /sys/devices/virtual/dmi/id/product_name 2>/dev/null") or "Unknown"
 
-    # ── Display ──
-    disp_raw = run("xrandr 2>/dev/null | grep '\\*' | head -1 | awk '{print $1}'")
+    disp_raw = run(r"xrandr 2>/dev/null | grep '\*' | head -1 | awk '{print $1}'")
     disp_info = disp_raw or run(
         "xdpyinfo 2>/dev/null | grep 'dimensions:' | head -1 | awk '{print $2}'"
     ) or "1920x1080"
 
-    # ── Packages ──
     dpkg_count = run("dpkg -l 2>/dev/null | wc -l") or "0"
     flat_count = run("flatpak list 2>/dev/null | wc -l") or "0"
     snap_count = run("snap list 2>/dev/null | wc -l") or "0"
@@ -178,7 +97,6 @@ def main():
         pkg_parts.append(f"{snap_count} (snap)")
     pkg_info = ", ".join(pkg_parts) if pkg_parts else "0"
 
-    # ── CPU details ──
     cpu_model = run(
         "grep 'model name' /proc/cpuinfo 2>/dev/null | head -1 | "
         "cut -d: -f2 | sed 's/^ *//; s/  */ /g; s/(R)//g; s/(TM)//g; "
@@ -194,8 +112,7 @@ def main():
     cpu_short = re.sub(r'Intel Core i\d-', 'i', cpu_model)
     cpu_info  = f"{cpu_short} ({cpu_cores}c @ {cpu_max}GHz)"
 
-    # ── GPU info ──
-    gpu_raw = run("lspci 2>/dev/null | grep -i 'vga\\|3d\\|display' | head -1")
+    gpu_raw = run(r"lspci 2>/dev/null | grep -i 'vga\|3d\|display' | head -1")
     if gpu_raw:
         gpu_clean = re.sub(r'^\S+\s+\S+\s+controller:\s*', '', gpu_raw)
         gpu_clean = re.sub(r'\bCorporation\b', '', gpu_clean)
@@ -213,7 +130,6 @@ def main():
     else:
         gpu_info = "Unknown"
 
-    # ── Memory ──
     mem_info = run("free -h 2>/dev/null | awk '/^Mem:/{print $3 \"/\" $2}'")
     zram_raw = run("zramctl --noheadings 2>/dev/null | head -1 | awk '{print $4 \"/\" $3}'")
     zram_info = f"zram {zram_raw}" if zram_raw else ""
@@ -222,12 +138,10 @@ def main():
     parts = [p for p in [mem_info, zram_info, swap_info] if p]
     mem_swap = " | ".join(parts)
 
-    # ── Disk ──
     disk_info = run(
         "df -h / 2>/dev/null | tail -1 | "
         "awk '{print $3 \"/\" $2 \" (\" $5 \")\"}'")
 
-    # ── OS full ──
     arch = run("uname -m") or "x86_64"
     codename = run("lsb_release -cs 2>/dev/null") or ""
     if codename:
@@ -235,56 +149,25 @@ def main():
     else:
         os_full = f"{os_name} [{arch}]"
 
-    # ── Box-drawing ──
+    # ── High-res ASCII logos ──
+    config_dir = os.environ.get(
+        "XDG_CONFIG_HOME", os.path.expanduser("~/.config")) + "/caelestia"
+    UB = load_logo(f"{config_dir}/ubuntu_ascii.txt", c_org)
+    CA = load_logo(f"{config_dir}/caelestia_ascii.txt", c_cya)
+
     tl, tr, bl, br, hz = "┌", "┐", "└", "┘", "─"
     tee, lst = "├", "└"
-
-    # ── Ubuntu logo (11 lines) ──
-    UB = [
-        "         ..,;,  .,;,.         ",
-        "       .,lool;  .ooooo,        ",
-        "      ;oo;:.    .coool.        ",
-        "    ....          ''' ,l;      ",
-        "   :oooo,             'oo.     ",
-        "   looooc             :oo'     ",
-        "    '::'              ,oo:     ",
-        "      ,.,        .... co,      ",
-        "       lo:;.   .oooo; .        ",
-        "        ':ooo;  cooooc         ",
-        "           '''  ''''           ",
-    ]
-
-    # ── Caelestia logo: half-block rendering ──
-    cae_logo_lines = get_logo()
-    if not cae_logo_lines:
-        # ASCII fallback
-        cae_logo_lines = [
-            f"             {c_cya}+{rst}                 ",
-            f"          {c_cya}.{rst}    {c_cya}.{rst}            ",
-            f"        {c_cya},{rst}        {c_cya},{rst}          ",
-            f"       {c_cya}/{rst}  {c_cya}╭──────╮{rst} {c_cya}\\{rst}       ",
-            f"      {c_cya}│{rst}  {c_cya}│{rst} {c_bri}◯{rst}    {c_bri}◯{rst} {c_cya}│{rst} {c_cya}│{rst}      ",
-            f"       {c_cya}\\{rst} {c_cya}│{rst}      {c_cya}│{rst} {c_cya}/{rst}        ",
-            f"        {c_cya}\\{rst}{c_cya}╰──────╯{rst}{c_cya}/{rst}          ",
-            f"      {c_cya}──────╯{rst}  {c_cya}╰──────{rst}      ",
-            f"         {c_cya}\\{rst}      {c_cya}/{rst}            ",
-            f"          {c_cya}\\{rst}    {c_cya}/{rst}             ",
-            f"           {c_cya}\\{rst}  {c_cya}/{rst}              ",
-            f"            {c_cya}\\{rst}{rst}                ",
-            f"          {c_cya}+{rst}   {c_cya}+{rst}              ",
-        ]
-    cae_logo_width = 28
 
     def fmt(icon, key, val, ck=c_sec, cv=c_bri):
         return f" {icon}  {ck}{key}{rst}  {cv}{val}{rst}"
 
-    def border(title, w=54):
-        return f"{c_sec}{tl}{hz}{title}{hz * (w - len(title) - 2)}{tr}{rst}"
+    def border(title, w):
+        pad = max(0, w - len(title) - 2)
+        return f"{c_sec}{tl}{hz}{title}{hz * pad}{tr}{rst}"
 
-    def bottom(w=54):
+    def bottom(w):
         return f"{c_sec}{bl}{hz * (w - 2)}{br}{rst}"
 
-    # ── Build sections ──
     hw = [
         fmt("󰌢", "Host",   host_name, c_pri, c_bri),
         fmt("", "CPU",    cpu_info,  c_pri, c_bri),
@@ -311,40 +194,50 @@ def main():
     ]
     ca = [
         fmt("󰏘", "Scheme",    f"{scheme_name} ({scheme_flavour})",
-            c_cya, c_bri),
-        fmt("󰔎", "Variant",   variant_line,                       c_cya, c_bri),
-        fmt("󰖨", "Mode",      mode_line,                          c_cya, c_bri),
-        fmt("󰸉", "Wallpaper", wall_display,                       c_cya, c_bri),
-        fmt("", "Shell",     "caelestia-shell 2.3.0",            c_cya, c_bri),
-        fmt("", "Quickshell", "v0.3.0",                          c_cya, c_bri),
+            c_pri, c_bri),
+        fmt("󰔎", "Variant",   variant_line,                       c_pri, c_bri),
+        fmt("󰖨", "Mode",      mode_line,                          c_pri, c_bri),
+        fmt("󰸉", "Wallpaper", wall_display,                       c_pri, c_bri),
+        fmt("", "Shell",     "caelestia-shell 2.3.0",            c_pri, c_bri),
+        fmt("", "Quickshell", "v0.3.0",                          c_pri, c_bri),
     ]
 
-    # ── Layout 1: Ubuntu + Hardware + Software ──
-    right1 = [border("Hardware")] + hw + [bottom()] + \
-             [border("Software")] + sw + [bottom()]
-    total1 = max(len(UB), len(right1))
+    # Layout: align both sections so info boxes share the same right column
+    term_w = shutil.get_terminal_size((120, 24)).columns
+    gap = 2
 
-    # ── Layout 2: Caelestia logo + Uptime + Caelestia ──
-    right2 = [border("Uptime / Age / DT")] + up + [bottom()] + \
-             [border("Caelestia")] + ca + [bottom()]
-    total2 = max(len(cae_logo_lines), len(right2))
+    logo_w1 = max((visual_width(ln) for ln in UB), default=0)
+    logo_w2 = max((visual_width(ln) for ln in CA), default=0)
+    logo_col = max(logo_w1, logo_w2)
 
-    # ── Render block 1: Ubuntu ──
-    print()
-    for i in range(total1):
-        logo = f"{c_org}{UB[i]}{rst}" if i < len(UB) else " " * 31
-        info = right1[i] if i < len(right1) else ""
-        print(f"{logo}  {info}")
+    # Section 1: Ubuntu logo + Hardware/Software
+    info_w1 = max(36, min(46, term_w - logo_col - gap - 2))
 
-    # ── Render block 2: Caelestia ──
-    for i in range(total2):
-        if i < len(cae_logo_lines):
-            logo = cae_logo_lines[i]
-        else:
-            logo = " " * cae_logo_width
-        info = right2[i] if i < len(right2) else ""
-        print(f"{logo}  {info}")
+    right1 = [border("Hardware", info_w1)] + hw + [bottom(info_w1)] + \
+             [border("Software", info_w1)] + sw + [bottom(info_w1)]
 
+    # Section 2: Caelestia logo + Uptime/Caelestia
+    info_w2 = max(36, min(46, term_w - logo_col - gap - 2))
+
+    right2 = [border("Uptime / Age / DT", info_w2)] + up + [bottom(info_w2)] + \
+             [border("Caelestia", info_w2)] + ca + [bottom(info_w2)]
+
+    def render_section(logo, right_block, logo_w, logo_col, gap):
+        L = len(logo)
+        I = len(right_block)
+        top_pad = 0  # top-align info block with logo (matches PR screenshot)
+        print()
+        for i in range(max(L, I)):
+            if i < I:
+                line = right_block[i]
+            else:
+                line = ""
+            logo_line = logo[i] if i < L else " " * logo_w
+            pad = " " * (logo_col - visual_width(logo_line))
+            print(f"{logo_line}{pad}{' ' * gap}{line}")
+
+    render_section(UB, right1, logo_w1, logo_col, gap)
+    render_section(CA, right2, logo_w2, logo_col, gap)
     print()
 
 

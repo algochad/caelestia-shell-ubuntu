@@ -276,12 +276,14 @@ update_bashrc_var "QML_IMPORT_PATH" "$QT_PREFIX/qml:/usr/lib/qt6/qml"
 
 # ── Caelestia Shell terminal info display (fastfetch-style via Python) ──
 if [[ -f "$SCRIPT_DIR/config/caelestia-fetch.py" ]]; then
-    # Copy Python script to caelestia config dir
+    # Copy Python script + ASCII logo art to caelestia config dir
     if [[ ! -d "$HOME/.config/caelestia" ]]; then
         mkdir -p "$HOME/.config/caelestia"
     fi
     cp "$SCRIPT_DIR/config/caelestia-fetch.py" "$HOME/.config/caelestia/caelestia-fetch.py"
-    ok "Installed caelestia-fetch.py"
+    cp "$SCRIPT_DIR/config/ubuntu_ascii.txt" "$HOME/.config/caelestia/ubuntu_ascii.txt"
+    cp "$SCRIPT_DIR/config/caelestia_ascii.txt" "$HOME/.config/caelestia/caelestia_ascii.txt"
+    ok "Installed caelestia-fetch.py and ASCII logo files"
 
     # Update bashrc to use the Python script
     # Remove old caelestia-info.sh references first
@@ -372,11 +374,20 @@ USER_ENVVARS="$HOME/.config/hypr/UserConfigs/ENVariables.conf"
 if [[ -f "$USER_ENVVARS" ]]; then
     if ! grep -q "QML_IMPORT_PATH.*qt6.11" "$USER_ENVVARS" 2>/dev/null; then
         info "Adding Qt 6.11 env vars to Hyprland ENVariables.conf..."
-        sed -i '/^### QT Variables ###/i \\
+        # Prefer inserting before the standard QT Variables marker
+        if grep -q '^### QT Variables ###' "$USER_ENVVARS" 2>/dev/null; then
+            sed -i '/^### QT Variables ###/i \\
 ### Qt 6.11 (caelestia shell) ###\\
 env = QML_IMPORT_PATH,'"$QT_PREFIX"'/qml:/usr/lib/qt6/qml\\
 env = LD_LIBRARY_PATH,'"$QT_PREFIX"'/lib:${LD_LIBRARY_PATH}\\
 ' "$USER_ENVVARS"
+        else
+            # Fallback: append to end of file
+            echo "" >> "$USER_ENVVARS"
+            echo "### Qt 6.11 (caelestia shell) ###" >> "$USER_ENVVARS"
+            echo "env = QML_IMPORT_PATH,$QT_PREFIX/qml:/usr/lib/qt6/qml" >> "$USER_ENVVARS"
+            echo "env = LD_LIBRARY_PATH,$QT_PREFIX/lib:\${LD_LIBRARY_PATH}" >> "$USER_ENVVARS"
+        fi
         ok "Added Qt 6.11 env vars to Hyprland ENVariables.conf"
     else
         ok "Qt 6.11 env vars already in Hyprland ENVariables.conf"
@@ -388,10 +399,10 @@ USER_KEYBINDS="$HOME/.config/hypr/UserConfigs/UserKeybinds.conf"
 if [[ -f "$USER_KEYBINDS" ]]; then
     KEYBINDS_CHANGED=false
 
-    # ── FIX: Update old broken IPC syntax (drawers toggle → drawers.toggle) ──
-    if grep -q "drawers toggle" "$USER_KEYBINDS" 2>/dev/null; then
-        sed -i 's/drawers toggle/drawers.toggle/g' "$USER_KEYBINDS"
-        ok "Fixed IPC syntax in UserKeybinds.conf (drawers toggle → drawers.toggle)"
+    # ── FIX: Correct old broken IPC syntax (drawers.toggle → drawers toggle) ──
+    if grep -q "drawers\.toggle" "$USER_KEYBINDS" 2>/dev/null; then
+        sed -i 's/drawers\.toggle/drawers toggle/g' "$USER_KEYBINDS"
+        ok "Fixed IPC syntax in UserKeybinds.conf (drawers.toggle → drawers toggle)"
         KEYBINDS_CHANGED=true
     fi
 
@@ -408,13 +419,13 @@ if [[ -f "$USER_KEYBINDS" ]]; then
 unbind = $mainMod, SPACE
 
 # Toggle launcher on Super+Space via IPC
-bindd = SUPER, SPACE, Open caelestia launcher, exec, caelestia shell drawers.toggle launcher
+bindd = SUPER, SPACE, Open caelestia launcher, exec, caelestia shell drawers toggle launcher
 
 # Toggle nexus (caelestia settings)
 bindd = SUPER, N, Open caelestia nexus, exec, caelestia shell nexus open
 
 # Toggle session menu
-bindd = SUPER SHIFT, E, Toggle session menu, exec, caelestia shell drawers.toggle session
+bindd = SUPER SHIFT, E, Toggle session menu, exec, caelestia shell drawers toggle session
 
 # Lock screen
 bindd = SUPER, L, Lock screen, exec, caelestia shell lock lock
@@ -484,9 +495,11 @@ restart_caelestia' "$SCRIPTS_DIR/Refresh.sh"
     fi
 
     # ToggleWaybarTime.sh: make restart_waybar a no-op
-    if [[ -f "$SCRIPTS_DIR/ToggleWaybarTime.sh" ]]; then
-        sed -i 's/restart_waybar() {.*/restart_waybar() {\n  # Caelestia replaces waybar; no restart needed.\n  :\n}/; /pkill.*waybar/d; /pgrep.*waybar/d; /systemctl.*waybar/d; /waybar \u003e/d; /}#/d' "$SCRIPTS_DIR/ToggleWaybarTime.sh" 2>/dev/null || true
+    if [[ -f "$SCRIPTS_DIR/ToggleWaybarTime.sh" ]] && ! grep -q "Caelestia replaces waybar" "$SCRIPTS_DIR/ToggleWaybarTime.sh" 2>/dev/null; then
+        sed -i 's/restart_waybar() {.*/restart_waybar() {\n  # Caelestia replaces waybar; no restart needed.\n  :\n}/; /pkill.*waybar/d; /pgrep.*waybar/d; /systemctl.*waybar/d; /waybar >/d; /}#/d' "$SCRIPTS_DIR/ToggleWaybarTime.sh" 2>/dev/null || true
         ok "Patched ToggleWaybarTime.sh"
+    else
+        ok "ToggleWaybarTime.sh already patched"
     fi
 
     # WaybarStartup.sh: start caelestia instead
@@ -495,18 +508,22 @@ restart_caelestia' "$SCRIPTS_DIR/Refresh.sh"
         ok "Patched WaybarStartup.sh"
     fi
 
-    # WaybarLayout.sh: disable waybar restarts
-    if [[ -f "$SCRIPTS_DIR/WaybarLayout.sh" ]]; then
+    # WaybarLayout.sh: disable waybar restarts and add caelestia fallback
+    if [[ -f "$SCRIPTS_DIR/WaybarLayout.sh" ]] && ! grep -q "Disabled: using caelestia instead" "$SCRIPTS_DIR/WaybarLayout.sh" 2>/dev/null; then
         sed -i 's/restart_waybar.*/# Disabled: using caelestia instead (waybar restart removed)/' "$SCRIPTS_DIR/WaybarLayout.sh"
         sed -i 's/waybar-msg.*reload/# Disabled: using caelestia instead/' "$SCRIPTS_DIR/WaybarLayout.sh"
         sed -i 's/pkill.*-SIGUSR2.*waybar/# Disabled: using caelestia instead/' "$SCRIPTS_DIR/WaybarLayout.sh"
         ok "Patched WaybarLayout.sh"
+    else
+        ok "WaybarLayout.sh already patched"
     fi
 
     # HyprLayoutModule.sh: disable refresh_waybar
-    if [[ -f "$SCRIPTS_DIR/HyprLayoutModule.sh" ]]; then
+    if [[ -f "$SCRIPTS_DIR/HyprLayoutModule.sh" ]] && ! grep -q "Disabled: using caelestia instead" "$SCRIPTS_DIR/HyprLayoutModule.sh" 2>/dev/null; then
         sed -i 's/pkill -RTMIN+8 waybar/# Disabled: using caelestia instead/' "$SCRIPTS_DIR/HyprLayoutModule.sh"
         ok "Patched HyprLayoutModule.sh"
+    else
+        ok "HyprLayoutModule.sh already patched"
     fi
 
     ok "JaKooLit scripts patched for caelestia"

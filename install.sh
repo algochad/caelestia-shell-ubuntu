@@ -354,10 +354,21 @@ if ! python3 -c "import build" 2>/dev/null; then
     pip3 install --break-system-packages build hatchling 2>&1 | tail -3
 fi
 
+# Patch caelestia-cli to add the `caelestia keybinds` cheatsheet subcommand
+info "Patching caelestia-cli to add keybinds subcommand..."
+cp "$SCRIPT_DIR/config/caelestia-cli-patches/keybinds.py" src/caelestia/subcommands/keybinds.py
+python3 "$SCRIPT_DIR/config/patch-caelestia-cli.py" src/caelestia/parser.py
+
 python3 -m build --wheel
 sudo pip3 install dist/*.whl --break-system-packages --force-reinstall
 
 ok "Caelestia CLI installed"
+
+# Install the standalone keybinds cheatsheet script
+info "Installing caelestia-keybinds script..."
+sudo cp "$SCRIPT_DIR/config/caelestia-keybinds.py" /usr/local/bin/caelestia-keybinds
+sudo chmod +x /usr/local/bin/caelestia-keybinds
+ok "caelestia-keybinds installed to /usr/local/bin"
 
 # ── Step 6: Build Caelestia Shell ────────────────────────────────────────────
 step "Step 6/15: Building Caelestia Shell"
@@ -580,6 +591,9 @@ bindd = SUPER SHIFT, E, Toggle session menu, exec, caelestia shell drawers toggl
 
 # Lock screen
 bindd = SUPER, L, Lock screen, exec, caelestia shell lock lock
+
+# Show keybinds cheatsheet
+bindd = SUPER, Slash, Show keybinds cheatsheet, exec, caelestia keybinds
 EOF
         ok "Added caelestia keybinds to UserKeybinds.conf"
         KEYBINDS_CHANGED=true
@@ -594,6 +608,16 @@ EOF
         sed -i '/bindd = SUPER, SPACE, Open caelestia launcher/a \
 # Toggle nexus (caelestia settings)\nbindd = SUPER, N, Open caelestia nexus, exec, caelestia shell nexus open' "$USER_KEYBINDS"
         ok "Added nexus keybind (Super+N) to UserKeybinds.conf"
+        KEYBINDS_CHANGED=true
+    fi
+
+    # ── FIX: Add keybinds cheatsheet keybind if missing ──
+    if ! grep -q "Show keybinds cheatsheet" "$USER_KEYBINDS" 2>/dev/null; then
+        info "Adding keybinds cheatsheet keybind to UserKeybinds.conf..."
+        # Insert after the lock screen keybind
+        sed -i '/bindd = SUPER, L, Lock screen, exec, caelestia shell lock lock/a \
+# Show keybinds cheatsheet\nbindd = SUPER, Slash, Show keybinds cheatsheet, exec, caelestia keybinds' "$USER_KEYBINDS"
+        ok "Added keybinds cheatsheet keybind (Super+Slash) to UserKeybinds.conf"
         KEYBINDS_CHANGED=true
     fi
 fi

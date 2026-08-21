@@ -849,3 +849,16 @@ echo -e "Edit shell config at ${BOLD}~/.config/caelestia/shell.json${NC}"
 echo ""
 echo -e "${YELLOW}NOTE: Open a new terminal or run 'source ~/.bashrc' to load environment.${NC}"
 echo -e "${YELLOW}NOTE: Logout/login or restart Hyprland for startup changes to take effect.${NC}"
+echo ""
+
+# ── Auto-start Caelestia Shell ─────────────────────────────────────────────
+if command -v caelestia &>/dev/null; then
+    if pgrep -x "caelestia" >/dev/null 2>&1 || pgrep -f "caelestia shell" >/dev/null 2>&1; then
+        info "Caelestia shell is already running"
+    else
+        info "Starting Caelestia shell..."
+        nohup caelestia shell -d >/dev/null 2>&1 &
+        disown
+        ok "Caelestia shell started"
+    fi
+fi

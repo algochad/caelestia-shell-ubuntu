@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 """
 Caelestia Shell Info Display
-Fastfetch-style terminal header with Ubuntu logo + system info + caelestia details.
+Fastfetch-style terminal header with Ubuntu + Caelestia logos.
 Called from ~/.bashrc on interactive shell startup.
 """
 
 import os
 import re
-import shutil
 import subprocess
-import sys
 
 
 def run(cmd):
@@ -25,49 +23,47 @@ def ansi(r, g, b):
 
 def main():
     # ── Colors ──
-    c_primary = ansi(180, 199, 237)   # scheme primary
-    c_secondary = ansi(168, 171, 185)
-    c_bright = ansi(228, 225, 230)
-    c_orange = ansi(233, 84, 32)      # Ubuntu
-    c_cyan = ansi(100, 200, 255)      # Caelestia
-    reset = "\033[0m"
-    bold = "\033[1m"
+    c_pri   = ansi(180, 199, 237)   # primary
+    c_sec   = ansi(168, 171, 185)   # secondary
+    c_bri   = ansi(228, 225, 230)   # bright
+    c_org   = ansi(233, 84, 32)     # Ubuntu orange
+    c_cya   = ansi(100, 200, 255)   # Caelestia cyan
+    rst     = "\033[0m"
 
     # ── Caelestia scheme info ──
     scheme_raw = run("caelestia scheme get 2>/dev/null")
-    # strip ANSI codes
     scheme_clean = re.sub(r'\x1b\[[0-9;]*m', '', scheme_raw)
-    scheme_name = re.search(r'Name:\s*(\S+)', scheme_clean)
-    scheme_name = scheme_name.group(1) if scheme_name else "dynamic"
-    scheme_flavour = re.search(r'Flavour:\s*(\S+)', scheme_clean)
-    scheme_flavour = scheme_flavour.group(1) if scheme_flavour else "default"
-    mode_line = re.search(r'Mode:\s*(\S+)', scheme_clean)
-    mode_line = mode_line.group(1) if mode_line else "dark"
-    variant_line = re.search(r'Variant:\s*(\S+)', scheme_clean)
-    variant_line = variant_line.group(1) if variant_line else "tonalspot"
-    wall_line = run("caelestia wallpaper 2>/dev/null | head -1")
-    wall_display = os.path.basename(wall_line) if wall_line else "default"
+
+    def pick(pat, default=""):
+        m = re.search(pat, scheme_clean)
+        return m.group(1) if m else default
+
+    scheme_name    = pick(r'Name:\s*(\S+)',     "dynamic")
+    scheme_flavour = pick(r'Flavour:\s*(\S+)',  "default")
+    mode_line      = pick(r'Mode:\s*(\S+)',     "dark")
+    variant_line   = pick(r'Variant:\s*(\S+)', "tonalspot")
+    wall_line      = run("caelestia wallpaper 2>/dev/null | head -1")
+    wall_display   = os.path.basename(wall_line) if wall_line else "default"
 
     # ── System info ──
-    os_name = run("lsb_release -d 2>/dev/null | cut -f2") or "Ubuntu 26.04 LTS"
-    kernel = run("uname -r")
-    uptime = run("uptime -p 2>/dev/null | sed 's/up //'") or run("uptime | sed 's/.*up \\([^,]*\\),.*/\\1/'")
-    shell_name = os.path.basename(os.environ.get("SHELL", "bash"))
-    wm_name = "Hyprland"
-    terminal_name = "kitty"
+    os_name      = run("lsb_release -d 2>/dev/null | cut -f2") or "Ubuntu 26.04 LTS"
+    kernel       = run("uname -r")
+    uptime       = run("uptime -p 2>/dev/null | sed 's/up //'") or \
+                   run("uptime | sed 's/.*up \\([^,]*\\),.*/\\1/'")
+    shell_name   = os.path.basename(os.environ.get("SHELL", "bash"))
+    cpu_info     = run("grep 'model name' /proc/cpuinfo 2>/dev/null | head -1 | "
+                       "cut -d: -f2 | sed 's/^ *//; s/  */ /g; s/(R)//g; s/(TM)//g; "
+                       "s/ CPU @//g; s/ GHz/ GHz/' | cut -c1-35")
+    mem_info     = run("free -h 2>/dev/null | awk '/^Mem:/{print $3 \"/\" $2}'")
+    disk_info    = run("df -h / 2>/dev/null | tail -1 | "
+                       "awk '{print $3 \"/\" $2 \" (\" $5 \")\"}'")
 
-    cpu_info = run("grep 'model name' /proc/cpuinfo 2>/dev/null | head -1 | cut -d: -f2 | sed 's/^ *//; s/  */ /g; s/(R)//g; s/(TM)//g; s/ CPU @//g; s/ GHz/ GHz/' | cut -c1-35")
-    mem_info = run("free -h 2>/dev/null | awk '/^Mem:/{print $3 \"/\" $2}'")
-    disk_info = run("df -h / 2>/dev/null | tail -1 | awk '{print $3 \"/\" $2 \" (\" $5 \")\"}'")
+    # ── Box-drawing ──
+    tl, tr, bl, br, hz, vt = "┌", "┐", "└", "┘", "─", "│"
+    brn, lst = "├", "└"
 
-    # ── Box-drawing helpers ──
-    top_l = "┌"; top_r = "┐"; bot_l = "└"; bot_r = "┘"
-    horiz = "─"; vert = "│"
-    tee_r = "├"; tee_l = "┤"
-    branch = "├"; last_branch = "└"
-
-    # ── Ubuntu logo (fastfetch style, using safe chars) ──
-    ubuntu_logo = [
+    # ── Ubuntu logo (fastfetch style) ──
+    ubu_logo = [
         "        ..;,; .,;,.        ",
         "     .,lool: .ooooo,       ",
         "    ;oo;:    .coool.       ",
@@ -81,78 +77,94 @@ def main():
         "         '''  ''''         ",
     ]
 
-    # ── Build sections ──
-    def fmt(icon, key, val, col_key=c_secondary, col_val=c_bright):
-        return f" {icon}  {col_key}{key}{reset}  {col_val}{val}{reset}"
+    # ── Caelestia celestial diamond logo ──
+    cae_logo = [
+        "              .              ",
+        "            .:::.            ",
+        "          .:::::::.          ",
+        "        .:::::::::::.        ",
+        "      .:::::: ** ::::::.     ",
+        "        :::::::::::::        ",
+        "          :::::::::          ",
+        "            :::::            ",
+        "              :              ",
+    ]
 
-    def border(title, width=48):
-        pad = width - len(title) - 2
-        return f"{c_secondary}{top_l}{horiz}{title}{horiz * pad}{top_r}{reset}"
+    def fmt(icon, key, val, ck=c_sec, cv=c_bri):
+        return f" {icon}  {ck}{key}{rst}  {cv}{val}{rst}"
 
-    def bottom(width=48):
-        return f"{c_secondary}{bot_l}{horiz * (width - 2)}{bot_r}{reset}"
+    def border(title, w=48):
+        pad = w - len(title) - 2
+        return f"{c_sec}{tl}{hz}{title}{hz * pad}{tr}{rst}"
 
-    # Print everything
+    def bottom(w=48):
+        return f"{c_sec}{bl}{hz * (w - 2)}{br}{rst}"
+
+    # ── Sections ──
+    hw = [
+        fmt("", "CPU",    cpu_info,  c_pri, c_bri),
+        fmt("󰍛", "Memory", mem_info,  c_pri, c_bri),
+        fmt("", "Disk",   disk_info, c_pri, c_bri),
+    ]
+    sw = [
+        fmt("", "OS",  os_name, c_pri, c_bri),
+        f" {c_sec}{brn}{rst} {fmt('', 'Kernel', kernel, c_pri, c_bri)}",
+        f" {c_sec}{brn}{rst} {fmt('', 'Shell', f'{shell_name} 5.3.9', c_pri, c_bri)}",
+        fmt("", "WM", "Hyprland 0.53.3 (Wayland)", c_pri, c_bri),
+        f" {c_sec}{brn}{rst} {fmt('', 'DM',   'gdm-password 50.0', c_pri, c_bri)}",
+        f" {c_sec}{lst}{rst} {fmt('', 'Terminal', 'kitty 0.45.0', c_pri, c_bri)}",
+    ]
+    up = [
+        fmt("", "Uptime", uptime,      c_sec, c_bri),
+        fmt("", "OS Age", "114 days",  c_sec, c_bri),
+    ]
+    ca = [
+        fmt("󰏘", "Scheme",    f"{scheme_name} ({scheme_flavour})", c_cya, c_bri),
+        fmt("󰔎", "Variant",   variant_line,                       c_cya, c_bri),
+        fmt("󰖨", "Mode",      mode_line,                          c_cya, c_bri),
+        fmt("󰸉", "Wallpaper", wall_display,                       c_cya, c_bri),
+        fmt("", "Shell",     "caelestia-shell 2.3.0",            c_cya, c_bri),
+        fmt("", "Quickshell","v0.3.0",                           c_cya, c_bri),
+    ]
+
+    all_secs = [
+        (border("Hardware"),       hw, bottom()),
+        (border("Software"),       sw, bottom()),
+        (border("Uptime / Age / DT"), up, bottom()),
+        (border("Caelestia"),        ca, bottom()),
+    ]
+
+    # Flatten into one list and record section start indices
+    sec_data = []
+    sec_start = []
+    for hdr, lines, ftr in all_secs:
+        sec_start.append(len(sec_data))
+        sec_data.append(hdr)
+        sec_data.extend(lines)
+        sec_data.append(ftr)
+        sec_data.append("")
+
+    # ── Render: logo left, sections right ──
     print()
+    total = max(len(ubu_logo), len(sec_data))
+    cae_begin = sec_start[3]          # Caelestia section start index
+    cae_end   = sec_start[3] + 1 + len(ca) + 1  # header + lines + footer
 
-    # Hardware section
-    hw_title = f"Hardware"
-    hw_lines = [
-        fmt("", "CPU", cpu_info, c_primary, c_bright),
-        fmt("󰍛", "Memory", mem_info, c_primary, c_bright),
-        fmt("", "Disk", disk_info, c_primary, c_bright),
-    ]
+    for i in range(total):
+        # Pick logo: Caelestia cyan diamond for Caelestia section, Ubuntu orange otherwise
+        if cae_begin <= i < cae_end:
+            off = i - cae_begin
+            if off < len(cae_logo):
+                logo = f"{c_cya}{cae_logo[off]}{rst}"
+            else:
+                logo = " " * 27
+        elif i < len(ubu_logo):
+            logo = f"{c_org}{ubu_logo[i]}{rst}"
+        else:
+            logo = " " * 27
 
-    # Software section
-    sw_title = f"Software"
-    sw_lines = [
-        fmt("", "OS", os_name, c_primary, c_bright),
-        f" {c_secondary}{branch}{reset} {fmt('', 'Kernel', kernel, c_primary, c_bright)}",
-        f" {c_secondary}{branch}{reset} {fmt('', 'Shell', f'{shell_name} 5.3.9', c_primary, c_bright)}",
-        fmt("", "WM", f"{wm_name} 0.53.3 (Wayland)", c_primary, c_bright),
-        f" {c_secondary}{branch}{reset} {fmt('', 'DM', 'gdm-password 50.0', c_primary, c_bright)}",
-        f" {c_secondary}{last_branch}{reset} {fmt('', 'Terminal', 'kitty 0.45.0', c_primary, c_bright)}",
-    ]
-
-    # Uptime section
-    up_lines = [
-        fmt("", "Uptime", uptime, c_secondary, c_bright),
-        fmt("", "OS Age", "114 days", c_secondary, c_bright),
-    ]
-
-    # Caelestia section
-    cae_lines = [
-        fmt("󰏘", "Scheme", f"{scheme_name} ({scheme_flavour})", c_cyan, c_bright),
-        fmt("󰔎", "Variant", variant_line, c_cyan, c_bright),
-        fmt("󰖨", "Mode", mode_line, c_cyan, c_bright),
-        fmt("󰸉", "Wallpaper", wall_display, c_cyan, c_bright),
-        fmt("", "Shell", "caelestia-shell 2.3.0", c_cyan, c_bright),
-        fmt("", "Quickshell", "v0.3.0", c_cyan, c_bright),
-    ]
-
-    # Determine max line count for alignment
-    max_lines = max(len(ubuntu_logo), len(hw_lines) + len(sw_lines) + len(up_lines) + len(cae_lines) + 6)
-
-    # Print logo left, sections right
-    section_idx = 0
-    all_sections = [
-        (border(hw_title), hw_lines, bottom()),
-        (border(sw_title), sw_lines, bottom()),
-        (border("Uptime / Age / DT"), up_lines, bottom()),
-        (border("Caelestia"), cae_lines, bottom()),
-    ]
-
-    section_data = []
-    for header, lines, footer in all_sections:
-        section_data.append(header)
-        section_data.extend(lines)
-        section_data.append(footer)
-        section_data.append("")
-
-    for i in range(max(max_lines, len(section_data))):
-        logo_part = ubuntu_logo[i] if i < len(ubuntu_logo) else " " * 27
-        sec_part = section_data[i] if i < len(section_data) else ""
-        print(f"{c_orange}{logo_part}{reset}  {sec_part}")
+        info = sec_data[i] if i < len(sec_data) else ""
+        print(f"{logo}  {info}")
 
     print()
 

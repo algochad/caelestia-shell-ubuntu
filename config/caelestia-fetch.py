@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
 Caelestia Shell Info Display
-Fastfetch-style terminal header with Ubuntu + Caelestia logos.
-Called from ~/.bashrc on interactive shell startup.
+Fastfetch-style: Ubuntu logo beside Hardware+Software, then Caelestia logo beside Uptime+Caelestia.
 """
 
 import os
@@ -24,11 +23,11 @@ def ansi(r, g, b):
 
 def main():
     # ── Colors ──
-    c_pri = ansi(180, 199, 237)   # primary
-    c_sec = ansi(168, 171, 185)   # secondary
-    c_bri = ansi(228, 225, 230)   # bright
-    c_org = ansi(233, 84, 32)     # Ubuntu orange
-    c_cya = ansi(100, 200, 255)   # Caelestia cyan
+    c_pri = ansi(180, 199, 237)
+    c_sec = ansi(168, 171, 185)
+    c_bri = ansi(228, 225, 230)
+    c_org = ansi(233, 84, 32)     # Ubuntu
+    c_cya = ansi(100, 200, 255)   # Caelestia
     rst = "\033[0m"
 
     # ── Caelestia info ──
@@ -39,24 +38,24 @@ def main():
         m = re.search(pat, clean)
         return m.group(1) if m else default
 
-    scheme_name = pick(r'Name:\s*(\S+)', "dynamic")
-    scheme_flavour = pick(r'Flavour:\s*(\S+)', "default")
-    mode_line = pick(r'Mode:\s*(\S+)', "dark")
-    variant_line = pick(r'Variant:\s*(\S+)', "tonalspot")
-    wall_line = run("caelestia wallpaper 2>/dev/null | head -1")
-    wall_display = os.path.basename(wall_line) if wall_line else "default"
+    scheme_name    = pick(r'Name:\s*(\S+)',     "dynamic")
+    scheme_flavour = pick(r'Flavour:\s*(\S+)',  "default")
+    mode_line      = pick(r'Mode:\s*(\S+)',     "dark")
+    variant_line   = pick(r'Variant:\s*(\S+)', "tonalspot")
+    wall_line      = run("caelestia wallpaper 2>/dev/null | head -1")
+    wall_display   = os.path.basename(wall_line) if wall_line else "default"
 
     # ── System info ──
-    os_name = run("lsb_release -d 2>/dev/null | cut -f2") or "Ubuntu 26.04 LTS"
-    kernel = run("uname -r")
-    uptime = (run("uptime -p 2>/dev/null | sed 's/up //'")
-              or run("uptime | sed 's/.*up \\([^,]*\\),.*/\\1/'"))
+    os_name   = run("lsb_release -d 2>/dev/null | cut -f2") or "Ubuntu 26.04 LTS"
+    kernel    = run("uname -r")
+    uptime    = (run("uptime -p 2>/dev/null | sed 's/up //'")
+                 or run("uptime | sed 's/.*up \\([^,]*\\),.*/\\1/'"))
     shell_name = os.path.basename(os.environ.get("SHELL", "bash"))
-    cpu_info = run(
+    cpu_info  = run(
         "grep 'model name' /proc/cpuinfo 2>/dev/null | head -1 | "
         "cut -d: -f2 | sed 's/^ *//; s/  */ /g; s/(R)//g; s/(TM)//g; "
         "s/ CPU @//g; s/ GHz/ GHz/' | cut -c1-35")
-    mem_info = run("free -h 2>/dev/null | awk '/^Mem:/{print $3 \"/\" $2}'")
+    mem_info  = run("free -h 2>/dev/null | awk '/^Mem:/{print $3 \"/\" $2}'")
     disk_info = run(
         "df -h / 2>/dev/null | tail -1 | "
         "awk '{print $3 \"/\" $2 \" (\" $5 \")\"}'")
@@ -65,7 +64,7 @@ def main():
     tl, tr, bl, br, hz = "┌", "┐", "└", "┘", "─"
     tee, lst = "├", "└"
 
-    # ── Ubuntu logo (fastfetch, 11 lines) ──
+    # ── Ubuntu logo (11 lines) ──
     UB = [
         "         ..,;,  .,;,.         ",
         "       .,lool;  .ooooo,        ",
@@ -133,47 +132,25 @@ def main():
         fmt("", "Quickshell", "v0.3.0",                          c_cya, c_bri),
     ]
 
-    sections = [
-        ("Hardware",           hw),
-        ("Software",           sw),
-        ("Uptime / Age / DT",  up),
-        ("Caelestia",          ca),
-    ]
+    # ── Layout 1: Ubuntu logo + Hardware + Software ──
+    right1 = [border("Hardware")] + hw + [bottom()] + [border("Software")] + sw + [bottom()]
+    total1 = max(len(UB), len(right1))
 
-    # Flatten right column: [header, item, item, ..., footer, header, item, ...]
-    right = []
-    sec_offsets = []   # index in `right` where each section starts
-    for title, items in sections:
-        sec_offsets.append(len(right))
-        right.append(border(title))
-        right.extend(items)
-        right.append(bottom())
+    # ── Layout 2: Caelestia logo + Uptime + Caelestia ──
+    right2 = [border("Uptime / Age / DT")] + up + [bottom()] + [border("Caelestia")] + ca + [bottom()]
+    total2 = max(len(CA), len(right2))
 
-    total_lines = max(len(UB), len(right))
-
-    # Caelestia section starts at this index in `right`
-    cae_start = sec_offsets[3]
-    cae_end = cae_start + 1 + len(ca) + 1   # header + items + footer
-
+    # ── Render block 1: Ubuntu ──
     print()
-    for i in range(total_lines):
-        # ── choose logo ──
-        if cae_start <= i < cae_end:
-            # Caelestia section → cyan diamond
-            off = i - cae_start
-            if off < len(CA):
-                logo = f"{c_cya}{CA[off]}{rst}"
-            else:
-                logo = " " * 31
-        elif i < len(UB):
-            # Before Caelestia → Ubuntu orange
-            logo = f"{c_org}{UB[i]}{rst}"
-        else:
-            logo = " " * 31
+    for i in range(total1):
+        logo = f"{c_org}{UB[i]}{rst}" if i < len(UB) else " " * 31
+        info = right1[i] if i < len(right1) else ""
+        print(f"{logo}  {info}")
 
-        # ── choose info line ──
-        info = right[i] if i < len(right) else ""
-
+    # ── Render block 2: Caelestia ──
+    for i in range(total2):
+        logo = f"{c_cya}{CA[i]}{rst}" if i < len(CA) else " " * 31
+        info = right2[i] if i < len(right2) else ""
         print(f"{logo}  {info}")
 
     print()

@@ -53,6 +53,29 @@ def main():
                  or run("uptime | sed 's/.*up \\([^,]*\\),.*/\\1/'"))
     shell_name = os.path.basename(os.environ.get("SHELL", "bash"))
 
+    # ── Host ──
+    host_name = run("cat /sys/devices/virtual/dmi/id/product_name 2>/dev/null") or "Unknown"
+
+    # ── Display ──
+    disp_raw = run("xrandr 2>/dev/null | grep '\\*' | head -1 | awk '{print $1}'")
+    if disp_raw:
+        disp_info = disp_raw
+    else:
+        disp_info = run("xdpyinfo 2>/dev/null | grep 'dimensions:' | head -1 | awk '{print $2}'") or "1920x1080"
+
+    # ── Packages ──
+    dpkg_count = run("dpkg -l 2>/dev/null | wc -l") or "0"
+    flat_count = run("flatpak list 2>/dev/null | wc -l") or "0"
+    snap_count = run("snap list 2>/dev/null | wc -l") or "0"
+    pkg_parts = []
+    if int(dpkg_count) > 0:
+        pkg_parts.append(f"{dpkg_count} (dpkg)")
+    if int(flat_count) > 0:
+        pkg_parts.append(f"{flat_count} (flatpak)")
+    if int(snap_count) > 0:
+        pkg_parts.append(f"{snap_count} (snap)")
+    pkg_info = ", ".join(pkg_parts) if pkg_parts else "0"
+
     # ── CPU details ──
     cpu_model = run(
         "grep 'model name' /proc/cpuinfo 2>/dev/null | head -1 | "
@@ -152,16 +175,27 @@ def main():
     def bottom(w=54):
         return f"{c_sec}{bl}{hz * (w - 2)}{br}{rst}"
 
+    # ── OS full ──
+    arch = run("uname -m") or "x86_64"
+    codename = run("lsb_release -cs 2>/dev/null") or ""
+    if codename:
+        os_full = f"{os_name} ({codename}) [{arch}]"
+    else:
+        os_full = f"{os_name} [{arch}]"
+
     # ── Build sections ──
     hw = [
-        fmt("", "CPU", cpu_info, c_pri, c_bri),
-        fmt("󰢮", "GPU", gpu_info, c_pri, c_bri),
-        fmt("󰍛", "Memory", mem_swap, c_pri, c_bri),
+        fmt("󰌢", "Host",   host_name, c_pri, c_bri),
+        fmt("", "CPU",    cpu_info,  c_pri, c_bri),
+        fmt("󰢮", "GPU",    gpu_info,  c_pri, c_bri),
+        fmt("󰍛", "Memory", mem_swap,  c_pri, c_bri),
         fmt("󰋊", "Disk",   disk_info, c_pri, c_bri),
+        fmt("󰹑", "Display", disp_info, c_pri, c_bri),
     ]
     sw = [
-        fmt("", "OS",  os_name, c_pri, c_bri),
+        fmt("", "OS",  os_full, c_pri, c_bri),
         f" {c_sec}{tee}{rst} {fmt('', 'Kernel', kernel, c_pri, c_bri)}",
+        f" {c_sec}{tee}{rst} {fmt('󰏗', 'Packages', pkg_info, c_pri, c_bri)}",
         f" {c_sec}{tee}{rst} {fmt('', 'Shell',
                                     f'{shell_name} 5.3.9', c_pri, c_bri)}",
         fmt("", "WM", "Hyprland 0.53.3 (Wayland)", c_pri, c_bri),

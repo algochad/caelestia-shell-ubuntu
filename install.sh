@@ -33,7 +33,7 @@ BUILD_DIR="$HOME/caelestia-build"
 QT_INSTALL_DIR="$HOME/qt6.11"
 QT_VERSION="6.11.2"
 QT_ARCH="linux_gcc_64"
-QT_PREFIX="$QT_INSTALL_DIR/$QT_VERSION/$QT_ARCH"
+QT_PREFIX="$QT_INSTALL_DIR/$QT_VERSION/gcc_64"
 
 # ── Helper ───────────────────────────────────────────────────────────────────
 confirm() {
@@ -51,6 +51,19 @@ if [[ -d "$QT_PREFIX/bin" ]] && [[ -f "$QT_PREFIX/qml/QtQuick/Controls/Material/
 else
     info "Downloading Qt $QT_VERSION via aqtinstall..."
 
+    # Ensure python3 venv support is available before creating one
+    if ! python3 -m venv --help &>/dev/null; then
+        info "python3-venv missing; installing via apt..."
+        # Try version-specific first, fall back to generic
+        PY_VENV_PKG="python3-venv"
+        PY_MINOR="$(python3 -c 'import sys; print(sys.version_info.minor)' 2>/dev/null)"
+        if [[ -n "$PY_MINOR" ]] && apt-cache show "python3.${PY_MINOR}-venv" &>/dev/null; then
+            PY_VENV_PKG="python3.${PY_MINOR}-venv"
+        fi
+        sudo apt update
+        sudo apt install -y "$PY_VENV_PKG" || sudo apt install -y python3-venv
+    fi
+
     # Install aqtinstall into a temporary venv
     AQT_VENV="$BUILD_DIR/.aqt-venv"
     mkdir -p "$BUILD_DIR"
@@ -61,20 +74,28 @@ else
         -O "$QT_INSTALL_DIR" 2>&1 | tail -5
 
     # Install required Qt modules
-    info "Installing Qt modules (shadertools, imageformats)..."
+    info "Installing Qt modules (shadertools, imageformats, tasktree)..."
     "$AQT_VENV/bin/aqt" install-qt linux desktop "$QT_VERSION" "$QT_ARCH" \
         -O "$QT_INSTALL_DIR" -m qtshadertools 2>&1 | tail -3
     "$AQT_VENV/bin/aqt" install-qt linux desktop "$QT_VERSION" "$QT_ARCH" \
         -O "$QT_INSTALL_DIR" -m qtimageformats 2>&1 | tail -3
+    "$AQT_VENV/bin/aqt" install-qt linux desktop "$QT_VERSION" "$QT_ARCH" \
+        -O "$QT_INSTALL_DIR" -m qttasktree 2>&1 | tail -3
 
     ok "Qt $QT_VERSION installed to $QT_INSTALL_DIR"
 fi
+
+# Export Qt 6.11 paths so all subsequent builds use it instead of system Qt 6.10
+export PATH="$QT_PREFIX/bin:${PATH}"
+export LD_LIBRARY_PATH="$QT_PREFIX/lib:$HOME/.local/lib:${LD_LIBRARY_PATH:-}"
+export QML_IMPORT_PATH="$QT_PREFIX/qml:/usr/lib/qt6/qml"
 
 # ── Step 1: APT dependencies ────────────────────────────────────────────────
 step "Step 1/8: Installing APT dependencies"
 
 sudo apt update
-sudo apt install -y \
+info "Installing APT dependencies (some may conflict on custom systems — continuing anyway)..."
+sudo apt install -y --fix-broken --no-install-recommends \
     build-essential cmake ninja-build git pkg-config meson \
     qt6-base-dev qt6-declarative-dev qt6-svg-dev qt6-wayland-dev \
     qt6-wayland qt6-shader-baker libqt6svg6 \
@@ -84,7 +105,105 @@ sudo apt install -y \
     libnotify-bin grim slurp wl-clipboard \
     fish brightnessctl ddcutil lm-sensors swappy \
     papirus-icon-theme \
-    libqalculate-dev libaubio-dev libiniparser-dev libfftw3-dev libsensors-dev
+    libqalculate-dev libaubio-dev libiniparser-dev libfftw3-dev libsensors-dev \
+    libcli11-dev \
+|| warn "Some APT packages failed due to version conflicts (common with mesa-git PPAs). Continuing — you may need to resolve these manually."
+
+# ── mesa-git PPA workaround ──────────────────────────────────────────────────
+# The mesa-git PPA provides newer runtime libraries but may not provide
+# matching -dev packages, causing apt dependency conflicts. We extract missing
+# dev packages locally so CMake/pkg-config can find headers and .pc files.
+
+extract_apt_dev_locally() {
+    local pkg="$1"
+    local pc_name="${2:-$pkg}"
+    local so_name="${3:-$pc_name}"
+
+    if pkg-config --exists "$pc_name" 2>/dev/null; then
+        return 0
+    fi
+
+    info "Extracting $pkg locally (mesa-git PPA workaround)..."
+    mkdir -p "$HOME/.local/include" "$HOME/.local/lib" "$HOME/.local/lib/pkgconfig"
+
+    local dl_dir
+    dl_dir="$(mktemp -d)"
+    cd "$dl_dir"
+    apt download "$pkg" 2>/dev/null
+    local deb_path
+    deb_path="$(find "$dl_dir" -maxdepth 1 -name "${pkg}_*.deb" -print -quit 2>/dev/null)"
+    cd - >/dev/null
+
+    if [[ -z "$deb_path" ]] || [[ ! -f "$deb_path" ]]; then
+        rm -rf "$dl_dir"
+        warn "Could not download $pkg deb. Skipping."
+        return 1
+    fi
+
+    local extract_dir="/tmp/${pkg}-local"
+    rm -rf "$extract_dir"
+    dpkg -x "$deb_path" "$extract_dir"
+    rm -rf "$dl_dir"
+
+    # Copy headers
+    if [[ -d "$extract_dir/usr/include" ]]; then
+        cp -r "$extract_dir/usr/include/"* "$HOME/.local/include/" 2>/dev/null || true
+    fi
+
+    # Copy library files (.a, .so, .so.*) from the dev package
+    if [[ -d "$extract_dir/usr/lib/x86_64-linux-gnu" ]]; then
+        find "$extract_dir/usr/lib/x86_64-linux-gnu" -maxdepth 1 \( -name "lib${so_name}.a" -o -name "lib${so_name}.so" -o -name "lib${so_name}.so.*" \) -exec cp {} "$HOME/.local/lib/" \; 2>/dev/null || true
+    fi
+
+    # Copy pkg-config files and fix prefix
+    if [[ -d "$extract_dir/usr/lib/x86_64-linux-gnu/pkgconfig" ]]; then
+        cp "$extract_dir/usr/lib/x86_64-linux-gnu/pkgconfig/"*.pc "$HOME/.local/lib/pkgconfig/" 2>/dev/null || true
+        for pc in "$HOME/.local/lib/pkgconfig/"*.pc; do
+            [[ -f "$pc" ]] || continue
+            sed -i 's|^prefix=/usr$|prefix=/home/algochad/.local|' "$pc"
+            sed -i 's|^exec_prefix=/usr$|exec_prefix=/home/algochad/.local|' "$pc"
+            sed -i 's|^libdir=${prefix}/lib/x86_64-linux-gnu$|libdir=${prefix}/lib|' "$pc"
+        done
+    fi
+
+    # Create .so symlink pointing to system runtime library (fallback if not copied above)
+    if [[ ! -f "$HOME/.local/lib/lib${so_name}.so" ]]; then
+        local sys_so
+        sys_so="$(find /usr/lib/x86_64-linux-gnu -maxdepth 1 -name "lib${so_name}.so.*" -print -quit 2>/dev/null)"
+        if [[ -n "$sys_so" ]]; then
+            ln -sf "$sys_so" "$HOME/.local/lib/lib${so_name}.so"
+        fi
+    fi
+
+    rm -rf "$extract_dir"
+    ok "$pkg extracted to ~/.local"
+}
+
+# Packages commonly blocked by mesa-git PPA dependency conflicts
+extract_apt_dev_locally "libdrm-dev"       "libdrm"           "drm"
+extract_apt_dev_locally "libgbm-dev"       "gbm"              "gbm"
+extract_apt_dev_locally "libpipewire-0.3-dev" "libpipewire-0.3"  "pipewire-0.3"
+extract_apt_dev_locally "libspa-0.2-dev"   "libspa-0.2"       "spa-0.2"
+extract_apt_dev_locally "libjemalloc-dev"  "jemalloc"         "jemalloc"
+extract_apt_dev_locally "libpolkit-agent-1-dev" "polkit-agent-1"   "polkit-agent-1"
+extract_apt_dev_locally "libpolkit-gobject-1-dev" "polkit-gobject-1" "polkit-gobject-1"
+# Additional packages that may fail due to cascading dependency conflicts
+extract_apt_dev_locally "libfftw3-dev"     "fftw3"            "fftw3"
+extract_apt_dev_locally "libaubio-dev"     "aubio"            "aubio"
+extract_apt_dev_locally "libiniparser-dev" "iniparser"        "iniparser"
+extract_apt_dev_locally "libsensors-dev"   "sensors"          "sensors"
+extract_apt_dev_locally "libqalculate-dev" "libqalculate"     "qalculate"
+# libqalculate headers need mpfr.h and gmp.h
+extract_apt_dev_locally "libmpfr-dev"      "mpfr"             "mpfr"
+extract_apt_dev_locally "libgmp-dev"       "gmp"              "gmp"
+# aubio runtime library (not just -dev)
+extract_apt_dev_locally "libaubio5"        "aubio"            "aubio"
+
+# Ensure local pkg-config and include paths are visible to all subsequent builds
+export PKG_CONFIG_PATH="$HOME/.local/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+export LIBRARY_PATH="$HOME/.local/lib:${LIBRARY_PATH:-}"
+export CPLUS_INCLUDE_PATH="$HOME/.local/include:${CPLUS_INCLUDE_PATH:-}"
+export C_INCLUDE_PATH="$HOME/.local/include:${C_INCLUDE_PATH:-}"
 
 ok "APT dependencies installed"
 
@@ -149,6 +268,7 @@ fi
 rm -rf build
 cmake -GNinja -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DCMAKE_PREFIX_PATH="$QT_PREFIX" \
+    -DQt6_DIR="$QT_PREFIX/lib/cmake/Qt6" \
     -DCMAKE_INSTALL_PREFIX=/usr \
     -DCMAKE_INSTALL_RPATH="$QT_PREFIX/lib;/usr/lib/x86_64-linux-gnu" \
     -DCRASH_REPORTER=OFF \
@@ -199,6 +319,12 @@ else
     cd caelestia-cli
 fi
 
+# Ensure python build tools are available (apt may have failed to install them)
+if ! python3 -c "import build" 2>/dev/null; then
+    info "python3-build not available via apt, installing via pip..."
+    pip3 install --break-system-packages build hatchling 2>&1 | tail -3
+fi
+
 python3 -m build --wheel
 sudo pip3 install dist/*.whl --break-system-packages --force-reinstall
 
@@ -206,11 +332,6 @@ ok "Caelestia CLI installed"
 
 # ── Step 6: Build Caelestia Shell ────────────────────────────────────────────
 step "Step 6/8: Building Caelestia Shell"
-
-# Ensure Qt 6.11 is used for build
-export PATH="$QT_PREFIX/bin:${PATH}"
-export LD_LIBRARY_PATH="$QT_PREFIX/lib:${LD_LIBRARY_PATH:-}"
-export QML_IMPORT_PATH="$QT_PREFIX/qml:/usr/lib/qt6/qml"
 
 mkdir -p ~/.config/quickshell
 
@@ -226,10 +347,11 @@ fi
 rm -rf build
 PKG_CONFIG_PATH="/usr/local/lib/x86_64-linux-gnu/pkgconfig:${PKG_CONFIG_PATH:-}" \
 cmake -B build -G Ninja \
-    -DCMAKE_PREFIX_PATH="$QT_PREFIX" \
+    -DCMAKE_PREFIX_PATH="$HOME/.local;$QT_PREFIX" \
+    -DQt6_DIR="$QT_PREFIX/lib/cmake/Qt6" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=/ \
-    -DCMAKE_INSTALL_RPATH="$QT_PREFIX/lib;/usr/lib/x86_64-linux-gnu:$ORIGIN:$ORIGIN/../lib:$ORIGIN/lib"
+    -DCMAKE_INSTALL_RPATH="$QT_PREFIX/lib;/usr/lib/x86_64-linux-gnu:\$ORIGIN:\$ORIGIN/../lib:\$ORIGIN/lib"
 
 cmake --build build
 sudo cmake --install build
@@ -271,7 +393,7 @@ update_bashrc_var() {
 }
 
 update_bashrc_var "PATH" "$QT_PREFIX/bin:\${PATH}"
-update_bashrc_var "LD_LIBRARY_PATH" "$QT_PREFIX/lib:\${LD_LIBRARY_PATH:-}"
+update_bashrc_var "LD_LIBRARY_PATH" "$QT_PREFIX/lib:$HOME/.local/lib:\${LD_LIBRARY_PATH:-}"
 update_bashrc_var "QML_IMPORT_PATH" "$QT_PREFIX/qml:/usr/lib/qt6/qml"
 
 # ── Caelestia Shell terminal info display (fastfetch-style via Python) ──
@@ -297,7 +419,7 @@ if [[ -f "$SCRIPT_DIR/config/caelestia-fetch.py" ]]; then
     if ! grep -q "caelestia-fetch.py" ~/.bashrc 2>/dev/null; then
         echo "" >> ~/.bashrc
         echo "# ── Caelestia Shell Info Display ──" >> ~/.bashrc
-        echo "if command -v caelestia \u0026\u003e /dev/null \u0026\u0026 [[ -f ~/.config/caelestia/caelestia-fetch.py ]]; then" >> ~/.bashrc
+        echo "if command -v caelestia &> /dev/null && [[ -f ~/.config/caelestia/caelestia-fetch.py ]]; then" >> ~/.bashrc
         echo "    python3 ~/.config/caelestia/caelestia-fetch.py" >> ~/.bashrc
         echo "fi" >> ~/.bashrc
         ok "Added caelestia terminal info display to ~/.bashrc"
@@ -379,7 +501,7 @@ if [[ -f "$USER_ENVVARS" ]]; then
             sed -i '/^### QT Variables ###/i \\
 ### Qt 6.11 (caelestia shell) ###\\
 env = QML_IMPORT_PATH,'"$QT_PREFIX"'/qml:/usr/lib/qt6/qml\\
-env = LD_LIBRARY_PATH,'"$QT_PREFIX"'/lib:${LD_LIBRARY_PATH}\\
+env = LD_LIBRARY_PATH,'"$QT_PREFIX"'/lib:'"$HOME"'/.local/lib:${LD_LIBRARY_PATH}\\
 ' "$USER_ENVVARS"
         else
             # Fallback: append to end of file

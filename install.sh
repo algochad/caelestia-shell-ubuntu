@@ -486,6 +486,48 @@ update_bashrc_var "LD_LIBRARY_PATH" "$QT_PREFIX/lib:$HOME/.local/lib:\${LD_LIBRA
 update_bashrc_var "QML_IMPORT_PATH" "$HOME/.config/quickshell/caelestia/build/qml:$QT_PREFIX/qml:/usr/lib/qt6/qml"
 
 # ── Caelestia Shell terminal info display (fastfetch-style via Python) ──
+# ── Kitty terminal: follow caelestia scheme ──────────────────────────────
+# New kitty instances read kitty.conf, which by default includes JaKooLit's
+# stale wallust theme. Swap the include for a caelestia-generated theme and
+# regenerate it on every scheme change via the CLI postHook.
+if [[ -f "$SCRIPT_DIR/config/caelestia/kitty-colors.py" ]]; then
+    mkdir -p "$HOME/.config/caelestia" "$HOME/.config/kitty"
+    cp -f "$SCRIPT_DIR/config/caelestia/kitty-colors.py" "$HOME/.config/caelestia/kitty-colors.py"
+    chmod +x "$HOME/.config/caelestia/kitty-colors.py"
+
+    # Register postHook in cli.json (merge, don't clobber)
+    python3 - << 'PY'
+import json, os
+from pathlib import Path
+p = Path.home() / ".config/caelestia/cli.json"
+cfg = json.loads(p.read_text()) if p.exists() else {}
+hook = "$HOME/.config/caelestia/kitty-colors.py"
+cfg.setdefault("theme", {})["postHook"] = hook
+cfg.setdefault("wallpaper", {})["postHook"] = hook
+p.write_text(json.dumps(cfg, indent=2) + "\n")
+PY
+
+    # Swap kitty.conf include (idempotent)
+    KITTY_CONF="$HOME/.config/kitty/kitty.conf"
+    if [[ -f "$KITTY_CONF" ]]; then
+        if grep -q "kitty-themes/01-Wallust.conf" "$KITTY_CONF"; then
+            sed -i 's|include ./kitty-themes/01-Wallust.conf|include caelestia.conf|' "$KITTY_CONF"
+            ok "kitty.conf now includes caelestia theme"
+        elif grep -q "include caelestia.conf" "$KITTY_CONF"; then
+            ok "kitty.conf already includes caelestia theme"
+        fi
+    fi
+
+    # Generate the theme once from the current scheme
+    if command -v caelestia &>/dev/null; then
+        CUR="$(caelestia shell wallpaper get 2>/dev/null)"
+        if [[ -n "$CUR" ]]; then
+            SCHEME_COLOURS="$(caelestia wallpaper -p "$CUR" 2>/dev/null | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["colours"]))' 2>/dev/null)"
+            [[ -n "$SCHEME_COLOURS" ]] && SCHEME_COLOURS="$SCHEME_COLOURS" "$HOME/.config/caelestia/kitty-colors.py" && ok "Generated initial kitty theme"
+        fi
+    fi
+fi
+
 if [[ -f "$SCRIPT_DIR/config/caelestia-fetch.py" ]]; then
     # Lock screen avatar (replaces the generic "person" glyph in ProfilePic)
     if [[ -f "$SCRIPT_DIR/config/face.png" ]]; then

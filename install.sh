@@ -117,7 +117,7 @@ fi
 # Export Qt 6.11 paths so all subsequent builds use it instead of system Qt 6.10
 export PATH="$QT_PREFIX/bin:${PATH}"
 export LD_LIBRARY_PATH="$QT_PREFIX/lib:$HOME/.local/lib:${LD_LIBRARY_PATH:-}"
-export QML_IMPORT_PATH="$QT_PREFIX/qml:/usr/lib/qt6/qml"
+export QML_IMPORT_PATH="$HOME/.config/quickshell/caelestia/build/qml:$QT_PREFIX/qml:/usr/lib/qt6/qml"
 
 # ── Step 1: APT dependencies ────────────────────────────────────────────────
 step "Step 1/15: Installing APT dependencies"
@@ -423,7 +423,7 @@ update_bashrc_var() {
 
 update_bashrc_var "PATH" "$QT_PREFIX/bin:\${PATH}"
 update_bashrc_var "LD_LIBRARY_PATH" "$QT_PREFIX/lib:$HOME/.local/lib:\${LD_LIBRARY_PATH:-}"
-update_bashrc_var "QML_IMPORT_PATH" "$QT_PREFIX/qml:/usr/lib/qt6/qml"
+update_bashrc_var "QML_IMPORT_PATH" "$HOME/.config/quickshell/caelestia/build/qml:$QT_PREFIX/qml:/usr/lib/qt6/qml"
 
 # ── Caelestia Shell terminal info display (fastfetch-style via Python) ──
 if [[ -f "$SCRIPT_DIR/config/caelestia-fetch.py" ]]; then
@@ -529,14 +529,14 @@ if [[ -f "$USER_ENVVARS" ]]; then
         if grep -q '^### QT Variables ###' "$USER_ENVVARS" 2>/dev/null; then
             sed -i '/^### QT Variables ###/i \\
 ### Qt 6.11 (caelestia shell) ###\\
-env = QML_IMPORT_PATH,'"$QT_PREFIX"'/qml:/usr/lib/qt6/qml\\
+env = QML_IMPORT_PATH,'"$HOME"'/.config/quickshell/caelestia/build/qml:'"$QT_PREFIX"'/qml:/usr/lib/qt6/qml\\
 env = LD_LIBRARY_PATH,'"$QT_PREFIX"'/lib:'"$HOME"'/.local/lib:${LD_LIBRARY_PATH}\\
 ' "$USER_ENVVARS"
         else
             # Fallback: append to end of file
             echo "" >> "$USER_ENVVARS"
             echo "### Qt 6.11 (caelestia shell) ###" >> "$USER_ENVVARS"
-            echo "env = QML_IMPORT_PATH,$QT_PREFIX/qml:/usr/lib/qt6/qml" >> "$USER_ENVVARS"
+            echo "env = QML_IMPORT_PATH,$HOME/.config/quickshell/caelestia/build/qml:$QT_PREFIX/qml:/usr/lib/qt6/qml" >> "$USER_ENVVARS"
             echo "env = LD_LIBRARY_PATH,$QT_PREFIX/lib:\${LD_LIBRARY_PATH}" >> "$USER_ENVVARS"
         fi
         ok "Added Qt 6.11 env vars to Hyprland ENVariables.conf"
@@ -684,7 +684,7 @@ fi
 if [[ -f ~/.config/hypr/hyprland.conf ]]; then
     if ! grep -q 'QML_IMPORT_PATH' ~/.config/hypr/hyprland.conf 2>/dev/null; then
         warn "Add this line to ~/.config/hypr/hyprland.conf:"
-        echo "  env = QML_IMPORT_PATH,$QT_PREFIX/qml:/usr/lib/qt6/qml"
+        echo "  env = QML_IMPORT_PATH,$HOME/.config/quickshell/caelestia/build/qml:$QT_PREFIX/qml:/usr/lib/qt6/qml"
     else
         ok "QML_IMPORT_PATH already set in hyprland.conf"
     fi

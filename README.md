@@ -32,9 +32,9 @@ The script will:
 3. Install fonts (CascadiaCode Nerd Font, Rubik, Material Symbols Rounded)
 4. Build and install quickshell (with Qt 6.11 RUNPATH)
 5. Build and install libcava (LukashonakV fork)
-6. Build and install caelestia CLI
+6. Build and install caelestia CLI (with `caelestia keybinds` cheatsheet subcommand)
 7. Build and install caelestia shell (with Qt 6.11 RUNPATH)
-8. Disable Waybar/AGS systemd autostart and patch JaKooLit scripts
+8. Disable Waybar/AGS systemd autostart, patch JaKooLit scripts, and add keybinds (including Super+/ cheatsheet)
 9. Add Qt 6.11 environment to `~/.bashrc`
 10. Configure Hyprland to auto-start `caelestia shell -d`
 11. Install [mise](https://mise.jdx.dev) (dev tool / env manager)
@@ -46,6 +46,26 @@ The script will:
 17. Install [Visual Studio Code](https://code.visualstudio.com)
 
 After install, **logout/login** (or `hyprctl dispatch exit`) for Hyprland to pick up the startup changes.
+
+## Keybinds Cheatsheet
+
+The installer patches the Caelestia CLI to add a `keybinds` subcommand and installs a standalone `caelestia-keybinds` script. It also binds **Super + /** to print the cheatsheet from within Hyprland.
+
+```bash
+# Full cheatsheet (Caelestia + JaKooLit + installer custom binds)
+caelestia keybinds
+
+# Filter by source
+.caelestia keybinds caelestia
+caelestia keybinds hypr
+caelestia keybinds custom
+```
+
+The cheatsheet is grouped by category (Workspaces, Window Actions, Apps, Utilities, Media, etc.) and reads keybinds from:
+
+- Caelestia dotfiles (`variables.lua` + `keybinds.lua`)
+- JaKooLit defaults (`~/.config/hypr/configs/Keybinds.conf`)
+- Installer custom binds (`~/.config/hypr/UserConfigs/UserKeybinds.conf`)
 
 ## Why This Fork Exists
 

@@ -445,14 +445,20 @@ if [[ -f "$SCRIPT_DIR/config/caelestia-fetch.py" ]]; then
         ok "Removed old caelestia-info.sh from ~/.bashrc"
     fi
 
-    # Terminal header: official caelestia fastfetch config primary, custom Python fallback.
+    # Terminal header: caelestia fastfetch config primary, custom Python fallback.
+    # Ships our palette-fixed copy: upstream hardcodes 256-color navy (38;5;16/17/18)
+    # and assumes a light terminal; ours uses bright white labels + fixed 256-color
+    # value brights (87/75/176) which stay visible on any dark theme.
     mkdir -p "$HOME/.config/fastfetch"
-    if [[ ! -f "$HOME/.config/fastfetch/caelestia.jsonc" ]]; then
+    if [[ -f "$SCRIPT_DIR/config/fastfetch/caelestia.jsonc" ]]; then
+        cp -f "$SCRIPT_DIR/config/fastfetch/caelestia.jsonc" "$HOME/.config/fastfetch/caelestia.jsonc"
+        ok "Installed palette-fixed caelestia fastfetch config"
+    elif [[ ! -f "$HOME/.config/fastfetch/caelestia.jsonc" ]]; then
         curl -sL "https://raw.githubusercontent.com/caelestia-dots/caelestia/main/fastfetch/config.jsonc" \
             -o "$HOME/.config/fastfetch/caelestia.jsonc"
-        ok "Installed official caelestia fastfetch config"
+        warn "Installed upstream fastfetch config (dark-on-dark colors possible)"
     else
-        ok "Official caelestia fastfetch config already present"
+        ok "caelestia fastfetch config already present"
     fi
 
     if ! grep -q "caelestia.jsonc" ~/.bashrc 2>/dev/null; then

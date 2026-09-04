@@ -500,15 +500,20 @@ if [[ -f "$SCRIPT_DIR/config/shell.json" ]]; then
     ok "Copied shell.json to ~/.config/caelestia/"
 fi
 
-# ── FIX: Ensure smartScheme is disabled (prevents wallpaper from overriding manual dark/light mode) ──
+# ── Enable dynamic theming: scheme follows wallpaper via matugen ──
 USER_SHELL_JSON="$HOME/.config/caelestia/shell.json"
 if [[ -f "$USER_SHELL_JSON" ]]; then
-    if grep -q '"smartScheme": true' "$USER_SHELL_JSON" 2>/dev/null; then
-        sed -i 's/"smartScheme": true/"smartScheme": false/' "$USER_SHELL_JSON"
-        ok "Disabled smartScheme in shell.json (prevents wallpaper from overriding dark/light mode)"
+    if grep -q '"smartScheme": false' "$USER_SHELL_JSON" 2>/dev/null; then
+        sed -i 's/"smartScheme": false/"smartScheme": true/' "$USER_SHELL_JSON"
+        ok "Enabled smartScheme (scheme auto-follows wallpaper)"
     else
-        ok "smartScheme already disabled or not present"
+        ok "smartScheme already enabled or not present"
     fi
+fi
+# Default scheme: dynamic (colours generated from wallpaper); harmless if caelestia CLI absent
+if command -v caelestia &>/dev/null; then
+    caelestia scheme set -n dynamic >/dev/null 2>&1 || warn "Could not set scheme to dynamic"
+    ok "Scheme set to dynamic (follows wallpaper)"
 fi
 
 if [[ -f "$SCRIPT_DIR/config/quickshell/qml_color.json" ]]; then

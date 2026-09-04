@@ -1,0 +1,186 @@
+diff --git a/services/NightLight.qml b/services/NightLight.qml
+new file mode 100644
+--- /dev/null
++++ b/services/NightLight.qml
+@@ -0,0 +1,108 @@
++pragma Singleton
++pragma ComponentBehavior: Bound
++
++import QtQuick
++import Quickshell
++import Quickshell.Io
++import qs.utils
++
++Singleton {
++    id: root
++
++    property bool enabled: false
++    property int temperature: 4000
++    readonly property int dayTemperature: 6500
++    readonly property int minTemp: 1000
++    readonly property int maxTemp: 6500
++
++    property bool available: false
++    property bool _loaded: false
++    readonly property string statePath: `${Paths.state}/nightlight.json`
++
++    // --- persistence ---
++    FileView {
++        id: storage
++
++        path: root.statePath
++        printErrors: false
++        watchChanges: true
++        onLoaded: {
++            try {
++                const data = JSON.parse(text());
++                if (typeof data.enabled === "boolean") root.enabled = data.enabled;
++                if (typeof data.temperature === "number") {
++                    const t = Math.round(data.temperature);
++                    root.temperature = Math.max(root.minTemp, Math.min(root.maxTemp, t));
++                }
++            } catch (e) {
++                console.warn("[NightLight] failed to parse", root.statePath, e);
++            }
++            root._loaded = true;
++        }
++        onLoadFailed: err => {
++            if (err === FileViewError.FileNotFound) {
++                root._loaded = true;
++                Qt.callLater(() => setText(JSON.stringify({ enabled: root.enabled, temperature: root.temperature })));
++            } else {
++                console.warn("[NightLight] load failed", err);
++                root._loaded = true;
++            }
++        }
++    }
++
++    Timer {
++        id: saveTimer
++        interval: 400
++        repeat: false
++        onTriggered: {
++            if (!root._loaded) return;
++            storage.setText(JSON.stringify({ enabled: root.enabled, temperature: root.temperature }));
++        }
++    }
++
++    function save(): void { if (root._loaded) saveTimer.restart(); }
++
++    // --- availability ---
++    Process {
++        id: availProc
++        running: true
++        command: ["sh", "-c", "command -v wlsunset >/dev/null 2>&1 && echo yes || echo no"]
++        stdout: StdioCollector {
++            onStreamFinished: {
++                root.available = text.trim() === "yes";
++                if (!root.available) console.warn("[NightLight] wlsunset not found — install 'wlsunset' package");
++            }
++        }
++    }
++
++    // --- daemon: wlsunset always-on at current temp (T==t) ---
++    Process {
++        id: daemonProc
++        running: root.enabled && root.available && root._loaded
++        command: ["wlsunset", "-T", String(root.temperature + 1), "-t", String(root.temperature), "-S", "06:00", "-s", "06:01", "-g", "1.0"]
++        stdout: StdioCollector { onStreamFinished: if (text.length) console.log("[NightLight]", text.trim()) }
++        stderr: StdioCollector { onStreamFinished: if (text.length) console.warn("[NightLight]", text.trim()) }
++        onRunningChanged: console.log("[NightLight] daemon", running ? "start" : "stop", "temp", root.temperature)
++    }
++
++    function setEnabled(v: bool): void { if (root.enabled === v) return; root.enabled = v; save(); }
++    function setTemperature(v: int): void {
++        const c = Math.max(root.minTemp, Math.min(root.maxTemp, Math.round(v)));
++        if (root.temperature === c) return;
++        root.temperature = c;
++        save();
++        if (daemonProc.running) {
++            daemonProc.running = false;
++            Qt.callLater(() => { if (root.enabled && root.available) daemonProc.running = true; });
++        }
++    }
++
++    IpcHandler {
++        target: "nightlight"
++        function status(): string { return JSON.stringify({ enabled: root.enabled, temperature: root.temperature, available: root.available }); }
++        function enable(): string { root.setEnabled(true); return "enabled"; }
++        function disable(): string { root.setEnabled(false); return "disabled"; }
++        function toggle(): string { root.setEnabled(!root.enabled); return root.enabled ? "enabled" : "disabled"; }
++        function setTemp(v: string): string { const n = parseInt(v, 10); if (isNaN(n)) return "invalid"; root.setTemperature(n); return String(root.temperature); }
++    }
++}
+--- a/modules/ServiceLoader.qml
++++ b/modules/ServiceLoader.qml
+@@ -12,6 +12,7 @@
+         Notifs;
+         Players;
+         Brightness;
++        NightLight;
+         Weather.reload();
+ 
+         if (GlobalConfig.utilities.vpn.enabled)
+--- a/modules/nexus/pages/WallpaperAndStyle.qml
++++ b/modules/nexus/pages/WallpaperAndStyle.qml
+@@ -178,6 +178,60 @@
+         }
+ 
+         ToggleRow {
++            text: qsTr("Automatic wallpaper change")
++            subtext: qsTr("Change wallpaper automatically after an interval")
++
++            checked: Config.background.wallpaperAutoChange
++
++            onToggled: GlobalConfig.background.wallpaperAutoChange = checked
++        }
++
++        StepperRow {
++            label: qsTr("Wallpaper interval")
++            subtext: qsTr("Time between wallpaper changes")
++
++            enabled: GlobalConfig.background.wallpaperAutoChange
++
++            from: 5
++            to: 360
++            stepSize: 5
++
++            value: GlobalConfig.background.wallpaperInterval / 60
++
++            onMoved: value => {
++                let minutes = Math.round(value);
++
++                if (minutes > 60)
++                    minutes = Math.round(minutes / 60) * 60;
++                else
++                    minutes = Math.round(minutes / 5) * 5;
++
++                GlobalConfig.background.wallpaperInterval = minutes * 60;
++            }
++        }
++
++        ToggleRow {
++            Layout.topMargin: Tokens.spacing.large - parent.spacing
++
++            first: false
++            last: false
++            text: qsTr("Night light")
++            subtext: NightLight.available ? qsTr("Warm display filter") : qsTr("Install wlsunset package")
++            enabled: NightLight.available
++            checked: NightLight.enabled
++            onToggled: NightLight.setEnabled(checked)
++        }
++
++        SliderRow {
++            label: qsTr("Colour temperature")
++            icon: "bedtime"
++            valueLabel: qsTr("%1 K").arg(NightLight.temperature)
++            enabled: NightLight.enabled && NightLight.available
++            value: (NightLight.temperature - NightLight.minTemp) / (NightLight.maxTemp - NightLight.minTemp)
++            onMoved: v => NightLight.setTemperature(Math.round(NightLight.minTemp + v * (NightLight.maxTemp - NightLight.minTemp)))
++        }
++
++        ToggleRow {
+             Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
+ 
+             text: qsTr("Transparency")

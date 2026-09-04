@@ -151,7 +151,7 @@ sudo apt install -y --fix-broken --no-install-recommends \
     fish brightnessctl ddcutil lm-sensors swappy \
     papirus-icon-theme \
     libqalculate-dev libaubio-dev libiniparser-dev libfftw3-dev libsensors-dev \
-    libcli11-dev \
+    libcli11-dev wlsunset \
 || warn "Some APT packages failed due to version conflicts (common with mesa-git PPAs). Continuing — you may need to resolve these manually."
 
 # ── mesa-git PPA workaround ──────────────────────────────────────────────────

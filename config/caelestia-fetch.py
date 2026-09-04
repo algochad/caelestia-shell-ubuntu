@@ -228,14 +228,16 @@ def gather():
 def render_box(title, rows, width, key_w):
     """Render one rounded box. Values right-aligned to the same column."""
     inner = width - 2
+    # top border: ╭ + ─ + " Title " + ─*pad + ╮ must equal width
     title_part = f" {C_TITLE}{title}{RST} "
-    pad = inner - visual_width(title_part)
-    top = f"{C_KEY}{TL}{HZ} {C_TITLE}{title}{RST} {HZ * (pad - 1)}{TR}{RST}"
+    pad = inner - visual_width(title_part) - 1
+    top = f"{C_KEY}{TL}{HZ} {C_TITLE}{title}{RST} {HZ * pad}{TR}{RST}"
 
     lines = [top]
     for icon, key, val in rows:
         left = f"{VT}{RST} {C_ICON}{icon}{RST} {C_KEY}{key:<{key_w}}{RST}  "
-        avail = inner - visual_width(left) - 2
+        # row = left + value + " │"  →  value field = inner - vw(left)
+        avail = inner - visual_width(left)
         v = str(val)
         if visual_width(v) > avail:
             v = v[:max(0, avail - 1)] + "…"

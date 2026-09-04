@@ -433,9 +433,9 @@ if [[ -f "$SCRIPT_DIR/config/caelestia-fetch.py" ]]; then
         mkdir -p "$HOME/.config/caelestia"
     fi
     cp "$SCRIPT_DIR/config/caelestia-fetch.py" "$HOME/.config/caelestia/caelestia-fetch.py"
-    cp "$SCRIPT_DIR/config/ubuntu_ascii.txt" "$HOME/.config/caelestia/ubuntu_ascii.txt"
     cp "$SCRIPT_DIR/config/caelestia_ascii.txt" "$HOME/.config/caelestia/caelestia_ascii.txt"
-    ok "Installed caelestia-fetch.py and ASCII logo files"
+    rm -f "$HOME/.config/caelestia/ubuntu_ascii.txt"
+    ok "Installed caelestia-fetch.py and caelestia ASCII logo"
 
     # Update bashrc to use the Python script
     # Remove old caelestia-info.sh references first
@@ -461,18 +461,21 @@ if [[ -f "$SCRIPT_DIR/config/caelestia-fetch.py" ]]; then
         ok "caelestia fastfetch config already present"
     fi
 
-    if ! grep -q "caelestia.jsonc" ~/.bashrc 2>/dev/null; then
-        # Drop legacy single-path hook if present
+    if ! grep -q "caelestia-fetch.py" ~/.bashrc 2>/dev/null; then
+        # Drop legacy hooks if present
         sed -i '/# ── Caelestia Shell Info Display ──/,+3d' ~/.bashrc 2>/dev/null || true
+        sed -i '/# ── Caelestia Terminal Header ──/,+7d' ~/.bashrc 2>/dev/null || true
         echo "" >> ~/.bashrc
         echo "# ── Caelestia Terminal Header ──" >> ~/.bashrc
-        echo "# Official caelestia fastfetch config; falls back to custom Python display." >> ~/.bashrc
-        echo "if command -v fastfetch &> /dev/null && [[ -f ~/.config/fastfetch/caelestia.jsonc ]]; then" >> ~/.bashrc
-        echo "    fastfetch -c ~/.config/fastfetch/caelestia.jsonc" >> ~/.bashrc
-        echo "elif command -v caelestia &> /dev/null && [[ -f ~/.config/caelestia/caelestia-fetch.py ]]; then" >> ~/.bashrc
+        echo "# Merged display: caelestia ASCII logo + smooth rounded boxes with nerd font" >> ~/.bashrc
+        echo "# icons (official fastfetch config + custom details combined)." >> ~/.bashrc
+        echo "# Falls back to plain fastfetch if the Python script is missing." >> ~/.bashrc
+        echo "if [[ -f ~/.config/caelestia/caelestia-fetch.py ]]; then" >> ~/.bashrc
         echo "    python3 ~/.config/caelestia/caelestia-fetch.py" >> ~/.bashrc
+        echo "elif command -v fastfetch &> /dev/null && [[ -f ~/.config/fastfetch/caelestia.jsonc ]]; then" >> ~/.bashrc
+        echo "    fastfetch -c ~/.config/fastfetch/caelestia.jsonc" >> ~/.bashrc
         echo "fi" >> ~/.bashrc
-        ok "Added caelestia terminal header to ~/.bashrc (official primary, custom fallback)"
+        ok "Added caelestia terminal header to ~/.bashrc (merged primary, fastfetch fallback)"
     else
         ok "caelestia terminal header already in ~/.bashrc"
     fi

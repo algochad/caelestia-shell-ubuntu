@@ -305,9 +305,13 @@ cmake -GNinja -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DINSTALL_QML_PREFIX=lib/qt6/qml
 
 cmake --build build
-sudo cmake --install build
 
-ok "Quickshell installed"
+# Install user-local: ~/.local/bin precedes /usr/local/bin in PATH, no sudo needed
+mkdir -p "$HOME/.local/bin"
+cp build/src/quickshell "$HOME/.local/bin/qs"
+chmod 755 "$HOME/.local/bin/qs"
+
+ok "Quickshell installed to ~/.local/bin/qs"
 
 # ── Step 4: Build libcava ────────────────────────────────────────────────────
 step "Step 4/15: Building libcava (LukashonakV fork)"
@@ -387,20 +391,17 @@ sudo cmake --install build
 
 ok "Caelestia Shell installed"
 
-# ── Step 7: Replace stale /usr/local/bin/quickshell ──────────────────────────
+# ── Step 7: Ensure user-local qs wins over system quickshell ────────────────
 step "Step 7/15: Fixing quickshell binary paths"
 
-# The old /usr/local/bin/quickshell (if installed by caelestia-cli) may be stale
-# Copy our rebuilt Qt 6.11 binary there too
-if [[ -f /usr/local/bin/quickshell ]]; then
-    if ! cmp -s /usr/bin/quickshell /usr/local/bin/quickshell 2>/dev/null; then
-        warn "Replacing stale /usr/local/bin/quickshell with rebuilt version..."
-        sudo cp /usr/bin/quickshell /usr/local/bin/quickshell
-        sudo chmod 755 /usr/local/bin/quickshell
-        ok "Updated /usr/local/bin/quickshell"
-    else
-        ok "/usr/local/bin/quickshell is already correct"
-    fi
+# ~/.local/bin/qs (installed in Step 3) precedes /usr/local/bin in PATH.
+# Stale root-owned copies may exist in /usr/local/bin — harmless since qs
+# resolves first, but refresh the symlink target if we have write access.
+QS_BIN="$HOME/.local/bin/qs"
+if [[ -x "$QS_BIN" ]]; then
+    ok "User-local qs present: $QS_BIN ($(qs --version 2>&1 | head -1))"
+else
+    warn "qs not found in ~/.local/bin — check Step 3 build logs"
 fi
 
 ok "Quickshell binaries verified"

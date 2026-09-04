@@ -39,14 +39,3 @@ out.write_text("\n".join(lines) + "\n")
 cache = Path.home() / ".cache/caelestia/palette.json"
 cache.parent.mkdir(parents=True, exist_ok=True)
 cache.write_text(json.dumps(colours))
-# Render the starship prompt config from its template. The template keeps
-# caelestia's module layout but references M3 palette roles, so the prompt
-# follows the scheme. Skipped silently if the template is absent.
-tmpl = Path.home() / ".config/caelestia/starship.template.toml"
-if tmpl.exists():
-    text = tmpl.read_text()
-    for key in ("primary", "secondary", "tertiary", "error", "onSurface"):
-        text = text.replace("{{%s}}" % key, colours[key].lstrip("#"))
-    dest = Path.home() / ".config/starship.toml"
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(text)

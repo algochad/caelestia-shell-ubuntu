@@ -528,6 +528,71 @@ PY
     fi
 fi
 
+# ── Starship prompt (caelestia-themed, follows scheme) ───────────────────
+# Official caelestia dots ship a starship.toml prompt config. We install the
+# starship binary plus a template whose colors the kitty-colors.py postHook
+# renders from the live scheme (~/.config/starship.toml), so the prompt
+# tracks the theme like the kitty theme and fetch header.
+if [[ -f "$SCRIPT_DIR/config/caelestia/starship.template.toml" ]]; then
+    mkdir -p "$HOME/.config/caelestia"
+
+    # Binary (single static build, no sudo needed)
+    if [[ ! -x "$HOME/.local/bin/starship" ]]; then
+        if curl -sS https://starship.rs/install.sh | sh -s -- -b "$HOME/.local/bin" -y >/dev/null 2>&1; then
+            ok "Installed starship to ~/.local/bin"
+        else
+            warn "starship install failed — prompt section skipped"
+        fi
+    fi
+
+    if [[ -x "$HOME/.local/bin/starship" ]]; then
+        cp -f "$SCRIPT_DIR/config/caelestia/starship.template.toml" "$HOME/.config/caelestia/starship.template.toml"
+
+        # Prompt config renders via the kitty-colors.py postHook; generate now
+        if [[ -f "$HOME/.cache/caelestia/palette.json" ]]; then
+            SCHEME_COLOURS="$(cat "$HOME/.cache/caelestia/palette.json")" \
+                "$HOME/.config/caelestia/kitty-colors.py" 2>/dev/null \
+                && ok "Generated themed starship config"
+        fi
+
+        # Bash integration: init + right-prompt cursor-jump hack + neutralize
+        # Oh My Bash's theme rebuild (it clobbers PS1 after starship).
+        if ! grep -q "__starship_rprompt" ~/.bashrc 2>/dev/null; then
+            cat >> ~/.bashrc << 'BASHRC_EOF'
+
+# ── Starship prompt (caelestia-themed) ──
+# Replaces the Oh My Bash theme prompt (OMB plugins/aliases stay active).
+# Bash has no native right prompt — starship's bash init only wires --right
+# for ble.sh — so we draw it via save-cursor + column jump after starship
+# builds PS1. Prompt config is rendered from the caelestia scheme by the
+# kitty-colors.py postHook (~/.config/caelestia/starship.template.toml).
+if [[ -x ~/.local/bin/starship ]]; then
+    eval "$(~/.local/bin/starship init bash)"
+    __starship_rprompt() {
+        local s=$? rprompt rwidth
+        rprompt="$(~/.local/bin/starship prompt --right --terminal-width="${COLUMNS}" 2>/dev/null)" || return $s
+        if [[ -n "$rprompt" && -n "$PS1" ]]; then
+            rwidth=$(printf '%s' "$rprompt" | sed $'s/\x1b\\[[0-9;]*m//g' | wc -m)
+            PS1="\[\\e7\\e[${COLUMNS}G\\e[${rwidth}D\]${rprompt}\[\\e8\]${PS1}"
+        fi
+        return $s
+    }
+    if [[ "${PROMPT_COMMAND-}" != *"__starship_rprompt"* ]]; then
+        PROMPT_COMMAND="${PROMPT_COMMAND%;};__starship_rprompt"
+    fi
+    # Oh My Bash re-renders its theme prompt after starship via
+    # _omb_util_prompt_command_hook (PROMPT_COMMAND array). Empty the theme
+    # callback list so starship's PS1 survives; OMB plugins stay active.
+    _omb_util_prompt_command=()
+fi
+BASHRC_EOF
+            ok "Added starship prompt to ~/.bashrc"
+        else
+            ok "starship prompt already in ~/.bashrc"
+        fi
+    fi
+fi
+
 if [[ -f "$SCRIPT_DIR/config/caelestia-fetch.py" ]]; then
     # Lock screen avatar (replaces the generic "person" glyph in ProfilePic)
     if [[ -f "$SCRIPT_DIR/config/face.png" ]]; then

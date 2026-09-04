@@ -225,15 +225,13 @@ def gather():
     ]
 
 
-def render_box(title, rows, width):
+def render_box(title, rows, width, key_w):
     """Render one rounded box. Values right-aligned to the same column."""
     inner = width - 2
     title_part = f" {C_TITLE}{title}{RST} "
     pad = inner - visual_width(title_part)
     top = f"{C_KEY}{TL}{HZ} {C_TITLE}{title}{RST} {HZ * (pad - 1)}{TR}{RST}"
 
-    # key column width
-    key_w = max(visual_width(k) for _, k, _ in rows)
     lines = [top]
     for icon, key, val in rows:
         left = f"{VT}{RST} {C_ICON}{icon}{RST} {C_KEY}{key:<{key_w}}{RST}  "
@@ -261,9 +259,12 @@ def main():
     side_by_side = term_w >= logo_w + 50
     box_w = min(72, term_w - logo_w - gap - 1) if side_by_side else min(72, term_w - 2)
 
+    # Global key column width so every box's value column aligns vertically
+    key_w = max(visual_width(k) for _, rows in sections for _, k, _ in rows)
+
     blocks = []
     for title, rows in sections:
-        blocks.append(render_box(title, rows, box_w))
+        blocks.append(render_box(title, rows, box_w, key_w))
         blocks.append([""])
 
     print()

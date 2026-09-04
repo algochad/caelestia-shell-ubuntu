@@ -7,8 +7,10 @@ smooth rounded boxes, Nerd Font icons, caelestia ASCII logo, full details.
 
 import os
 import re
+import json
 import shutil
 import subprocess
+import sys
 import time
 
 
@@ -48,12 +50,58 @@ def visual_width(s):
     return len(re.sub(r"\x1b\[[0-9;]*m", "", s))
 
 
-# ── Palette (bright truecolor — readable on any dark theme) ──
-C_TITLE = "\033[38;2;125;211;252m"   # caelestia cyan
-C_KEY   = "\033[38;2;168;171;185m"   # soft gray
-C_VAL   = "\033[38;2;228;225;230m"   # near white
-C_LOGO  = "\033[38;2;125;211;252m"   # caelestia cyan
-C_ICON  = "\033[38;2;125;211;252m"
+def _load_theme_palette():
+    """Load the caelestia colour palette.
+
+    1. ~/.cache/caelestia/palette.json — written by the kitty-colors.py
+       postHook on every scheme change (fast path).
+    2. `caelestia scheme get` — live query fallback.
+    Returns {} if caelestia is unavailable (fallback colours below).
+    """
+    cache = os.path.expanduser("~/.cache/caelestia/palette.json")
+    try:
+        data = json.loads(open(cache).read())
+        if data:
+            return data
+    except Exception:
+        pass
+    try:
+        out = subprocess.run(
+            ["caelestia", "scheme", "get"],
+            capture_output=True, text=True, timeout=5,
+        ).stdout
+        palette = {}
+        for line in out.splitlines():
+            line = re.sub(r"\x1b\[[0-9;]*m", "", line).strip()
+            m = re.match(r"^([A-Za-z0-9_]+):\s*([0-9a-fA-F]{6})$", line)
+            if m:
+                palette[m.group(1)] = m.group(2)
+        return palette
+    except Exception:
+        return {}
+
+
+def _tc(hexstr):
+    """Truecolor escape from a 'rrggbb' hex string."""
+    return "\033[38;2;{};{};{}m".format(
+        int(hexstr[0:2], 16), int(hexstr[2:4], 16), int(hexstr[4:6], 16))
+
+
+_THEME = _load_theme_palette()
+
+
+def _pick(key, fallback):
+    v = _THEME.get(key)
+    return _tc(v) if v else fallback
+
+
+# Palette follows the caelestia scheme (M3 roles); hardcoded values are
+# fallbacks only, used when caelestia is not installed/responding.
+C_TITLE = _pick("primary", "\033[38;2;125;211;252m")            # accent
+C_LOGO  = _pick("primary", "\033[38;2;125;211;252m")            # accent
+C_ICON  = _pick("secondary", "\033[38;2;125;211;252m")          # soft accent
+C_KEY   = _pick("onSurfaceVariant", "\033[38;2;168;171;185m")   # keys + borders
+C_VAL   = _pick("onSurface", "\033[38;2;228;225;230m")          # values
 RST     = "\033[0m"
 
 # ── Box drawing (smooth/rounded) ──
@@ -293,4 +341,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except BrokenPipeError:
+        # stdout closed early (e.g. piped to `head`) — exit quietly
+        try:
+            sys.stdout.close()
+        except Exception:
+            pass

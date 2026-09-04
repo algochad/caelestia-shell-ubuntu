@@ -34,3 +34,8 @@ lines += [f"color{i} {hx(f'term{i}')}" for i in range(16)]
 out = Path.home() / ".config/kitty/caelestia.conf"
 out.parent.mkdir(parents=True, exist_ok=True)
 out.write_text("\n".join(lines) + "\n")
+# Also dump the raw palette for other consumers (e.g. caelestia-fetch.py
+# terminal header) so they can follow the theme without re-querying.
+cache = Path.home() / ".cache/caelestia/palette.json"
+cache.parent.mkdir(parents=True, exist_ok=True)
+cache.write_text(json.dumps(colours))

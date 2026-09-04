@@ -444,16 +444,30 @@ if [[ -f "$SCRIPT_DIR/config/caelestia-fetch.py" ]]; then
         ok "Removed old caelestia-info.sh from ~/.bashrc"
     fi
 
-    # Add new Python-based display
-    if ! grep -q "caelestia-fetch.py" ~/.bashrc 2>/dev/null; then
+    # Terminal header: official caelestia fastfetch config primary, custom Python fallback.
+    mkdir -p "$HOME/.config/fastfetch"
+    if [[ ! -f "$HOME/.config/fastfetch/caelestia.jsonc" ]]; then
+        curl -sL "https://raw.githubusercontent.com/caelestia-dots/caelestia/main/fastfetch/config.jsonc" \
+            -o "$HOME/.config/fastfetch/caelestia.jsonc"
+        ok "Installed official caelestia fastfetch config"
+    else
+        ok "Official caelestia fastfetch config already present"
+    fi
+
+    if ! grep -q "caelestia.jsonc" ~/.bashrc 2>/dev/null; then
+        # Drop legacy single-path hook if present
+        sed -i '/# ── Caelestia Shell Info Display ──/,+3d' ~/.bashrc 2>/dev/null || true
         echo "" >> ~/.bashrc
-        echo "# ── Caelestia Shell Info Display ──" >> ~/.bashrc
-        echo "if command -v caelestia &> /dev/null && [[ -f ~/.config/caelestia/caelestia-fetch.py ]]; then" >> ~/.bashrc
+        echo "# ── Caelestia Terminal Header ──" >> ~/.bashrc
+        echo "# Official caelestia fastfetch config; falls back to custom Python display." >> ~/.bashrc
+        echo "if command -v fastfetch &> /dev/null && [[ -f ~/.config/fastfetch/caelestia.jsonc ]]; then" >> ~/.bashrc
+        echo "    fastfetch -c ~/.config/fastfetch/caelestia.jsonc" >> ~/.bashrc
+        echo "elif command -v caelestia &> /dev/null && [[ -f ~/.config/caelestia/caelestia-fetch.py ]]; then" >> ~/.bashrc
         echo "    python3 ~/.config/caelestia/caelestia-fetch.py" >> ~/.bashrc
         echo "fi" >> ~/.bashrc
-        ok "Added caelestia terminal info display to ~/.bashrc"
+        ok "Added caelestia terminal header to ~/.bashrc (official primary, custom fallback)"
     else
-        ok "caelestia terminal info display already in ~/.bashrc"
+        ok "caelestia terminal header already in ~/.bashrc"
     fi
 fi
 

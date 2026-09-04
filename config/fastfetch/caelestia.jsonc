@@ -14,46 +14,46 @@
         },
         {
             "type": "kernel",
-            "key": "│ {$2}{$1}  kernel",
+            "key": "│ {$2}  kernel",
             "format": "{$2}{release>38}{$1} │"
         },
         {
             "type": "command",
-            "key": "│  uptime",
+            "key": "│ {$2}  uptime",
             "text": "uptime -p | cut -d ' ' -f 2-",
-            "format": "{>38} │"
+            "format": "{$2}{>38}{$1} │"
         },
         {
             "type": "shell",
-            "key": "│ {$2} shell {$1}",
+            "key": "│ {$2}  shell ",
             "format": "{$2}{pretty-name>38}{$1} │"
         },
         {
             "type": "command",
-            "key": "│ {$3} mem   {$1}",
+            "key": "│ {$3}  mem   ",
             "text": "free -m | awk 'NR==2{printf \"%.2f GiB / %.2f GiB\",$3/1024,$2/1024}'",
             "format": "{$3}{>38}{$1} │"
         },
         {
             "type": "packages",
-            "key": "│  pkgs  {$1}",
-            "format": "{all>38} │"
+            "key": "│ {$3}  pkgs  ",
+            "format": "{$3}{all>38}{$1} │"
         },
         {
             "type": "command",
-            "key": "│ {$2} user  {$1}",
+            "key": "│ {$2}  user  ",
             "text": "echo $USER",
             "format": "{$2}{>38}{$1} │"
         },
         {
             "type": "command",
-            "key": "│  hname {$1}",
+            "key": "│ {$4}  hname ",
             "text": "hostnamectl hostname",
-            "format": "{>38} │"
+            "format": "{$4}{>38}{$1} │"
         },
         {
             "type": "os",
-            "key": "│ {$4} distro{$1}",
+            "key": "│ {$4}  distro",
             "format": "{$4}{pretty-name>38}{$1} │"
         },
         {

@@ -571,13 +571,9 @@ if [[ -x ~/.local/bin/starship ]]; then
     __starship_rprompt() {
         local s=$? rprompt rwidth
         rprompt="$(~/.local/bin/starship prompt --right --terminal-width="${COLUMNS}" 2>/dev/null)" || return $s
-        if [[ -n "$rprompt" && -n "$PS1" && -n "${COLUMNS}" ]]; then
-            # width must exclude SGR codes AND starship's \[ \] readline
-            # wrappers (literal backslash-brackets in its bash output)
-            rwidth=$(printf '%s' "$rprompt" | sed $'s/\x1b\\[[0-9;]*m//g' | tr -d '[]\\' | wc -m)
-            if (( rwidth > 0 && rwidth < COLUMNS )); then
-                PS1="\[\\e7\\e[${COLUMNS}G\\e[${rwidth}D\]${rprompt}\[\\e8\]${PS1}"
-            fi
+        if [[ -n "$rprompt" && -n "$PS1" ]]; then
+            rwidth=$(printf '%s' "$rprompt" | sed $'s/\x1b\\[[0-9;]*m//g' | wc -m)
+            PS1="\[\\e7\\e[${COLUMNS}G\\e[${rwidth}D\]${rprompt}\[\\e8\]${PS1}"
         fi
         return $s
     }

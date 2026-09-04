@@ -548,7 +548,7 @@
     ]
   },
   "paths": {
-    "wallpaperDir": "/home/ishmam-ahmed/Pictures/Wallpapers",
+    "wallpaperDir": "/home/algochad/Pictures/wallpapers",
     "sessionGif": "root:/assets/kurukuru.gif",
     "mediaGif": "root:/assets/bongocat.gif"
   }

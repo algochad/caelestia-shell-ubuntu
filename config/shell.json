@@ -32,7 +32,7 @@
     }
   },
   "general": {
-    "logo": "",
+    "logo": "caelestia",
     "apps": {
       "terminal": [
         "foot"

@@ -377,6 +377,17 @@ else
     cd "$SHELL_DIR"
 fi
 
+# Apply local patches on top of upstream (idempotent: skips if already applied)
+for patch_file in "$SCRIPT_DIR"/patches/*.diff; do
+    [[ -e "$patch_file" ]] || continue
+    if git apply --check "$patch_file" 2>/dev/null; then
+        git apply "$patch_file"
+        info "Applied patch: $(basename "$patch_file")"
+    else
+        info "Patch already applied or upstream changed: $(basename "$patch_file")"
+    fi
+done
+
 rm -rf build
 PKG_CONFIG_PATH="/usr/local/lib/x86_64-linux-gnu/pkgconfig:${PKG_CONFIG_PATH:-}" \
 cmake -B build -G Ninja \

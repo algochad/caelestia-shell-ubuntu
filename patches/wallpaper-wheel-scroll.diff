@@ -1,0 +1,20 @@
+diff --git a/modules/launcher/WallpaperList.qml b/modules/launcher/WallpaperList.qml
+index 7e086bc3..c7047435 100644
+--- a/modules/launcher/WallpaperList.qml
++++ b/modules/launcher/WallpaperList.qml
+@@ -94,4 +94,15 @@ PathView {
+             relativeY: 0
+         }
+     }
++
++    CustomMouseArea {
++        function onWheel(event: WheelEvent): void {
++            if (event.angleDelta.y > 0)
++                root.decrementCurrentIndex();
++            else if (event.angleDelta.y < 0)
++                root.incrementCurrentIndex();
++        }
++
++        anchors.fill: parent
++    }
+ }

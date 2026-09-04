@@ -362,7 +362,11 @@ step "Step 5/15: Installing Caelestia CLI"
 cd "$BUILD_DIR"
 if [[ -d caelestia-cli ]]; then
     info "caelestia-cli source already cloned, pulling latest..."
-    cd caelestia-cli && git pull
+    cd caelestia-cli
+    # Discard local keybinds patch so git pull can fast-forward
+    git reset --hard HEAD >/dev/null 2>&1 || true
+    git clean -fd >/dev/null 2>&1 || true
+    git pull
 else
     git clone https://github.com/caelestia-dots/cli.git caelestia-cli
     cd caelestia-cli
@@ -377,11 +381,12 @@ fi
 # Patch caelestia-cli to add the `caelestia keybinds` cheatsheet subcommand
 info "Patching caelestia-cli to add keybinds subcommand..."
 cp "$SCRIPT_DIR/config/caelestia-cli-patches/keybinds.py" src/caelestia/subcommands/keybinds.py
-python3 "$SCRIPT_DIR/config/patch-caelestia-cli.py" src/caelestia/parser.py
+python3 "$SCRIPT_DIR/config/patch-caelestia-cli.py" src/caelestia/parser.py || true
 
+# Clean previous build artifacts so pip only sees the fresh wheel
+rm -rf dist build
 python3 -m build --wheel
 sudo pip3 install dist/*.whl --break-system-packages --force-reinstall
-
 ok "Caelestia CLI installed"
 
 # dart-sass: the CLI's apply_discord() shells out to `sass` on every scheme

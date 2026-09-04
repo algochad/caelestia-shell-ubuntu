@@ -110,8 +110,24 @@ else
         -O "$QT_INSTALL_DIR" -m qtimageformats 2>&1 | tail -3
     "$AQT_VENV/bin/aqt" install-qt linux desktop "$QT_VERSION" "$QT_ARCH" \
         -O "$QT_INSTALL_DIR" -m qttasktree 2>&1 | tail -3
+    "$AQT_VENV/bin/aqt" install-qt linux desktop "$QT_VERSION" "$QT_ARCH" \
+        -O "$QT_INSTALL_DIR" -m qtmultimedia 2>&1 | tail -3
 
     ok "Qt $QT_VERSION installed to $QT_INSTALL_DIR"
+fi
+
+# QtMultimedia is required by the video-wallpaper patch (patches/wallpaper-features.diff)
+if [[ ! -d "$QT_PREFIX/qml/QtMultimedia" ]]; then
+    info "Installing QtMultimedia module..."
+    AQT_VENV="$BUILD_DIR/.aqt-venv"
+    mkdir -p "$BUILD_DIR"
+    if [[ ! -x "$AQT_VENV/bin/aqt" ]]; then
+        python3 -m venv "$AQT_VENV" --system-site-packages 2>/dev/null || python3 -m venv "$AQT_VENV"
+        "$AQT_VENV/bin/pip" install -q aqtinstall
+    fi
+    "$AQT_VENV/bin/aqt" install-qt linux desktop "$QT_VERSION" "$QT_ARCH" \
+        -O "$QT_INSTALL_DIR" -m qtmultimedia 2>&1 | tail -3
+    ok "QtMultimedia installed"
 fi
 
 # Export Qt 6.11 paths so all subsequent builds use it instead of system Qt 6.10
@@ -363,6 +379,23 @@ sudo pip3 install dist/*.whl --break-system-packages --force-reinstall
 
 ok "Caelestia CLI installed"
 
+# dart-sass: the CLI's apply_discord() shells out to `sass` on every scheme
+# change; without it the log spams "Error: exception during apply_discord()".
+# User-local install, no sudo.
+if ! command -v sass &>/dev/null; then
+    info "Installing dart-sass to ~/.local/opt..."
+    SASS_VER="1.104.0"
+    curl -sL -o "$BUILD_DIR/dart-sass.tar.gz" \
+        "https://github.com/sass/dart-sass/releases/download/${SASS_VER}/dart-sass-${SASS_VER}-linux-x64.tar.gz"
+    mkdir -p "$HOME/.local/opt"
+    rm -rf "$HOME/.local/opt/dart-sass"
+    tar xzf "$BUILD_DIR/dart-sass.tar.gz" -C "$HOME/.local/opt"
+    rm -f "$BUILD_DIR/dart-sass.tar.gz"
+    mkdir -p "$HOME/.local/bin"
+    ln -sf "$HOME/.local/opt/dart-sass/sass" "$HOME/.local/bin/sass"
+    ok "dart-sass ${SASS_VER} installed"
+fi
+
 # ── Step 6: Build Caelestia Shell ────────────────────────────────────────────
 step "Step 6/15: Building Caelestia Shell"
 
@@ -439,6 +472,12 @@ update_bashrc_var "QML_IMPORT_PATH" "$HOME/.config/quickshell/caelestia/build/qm
 
 # ── Caelestia Shell terminal info display (fastfetch-style via Python) ──
 if [[ -f "$SCRIPT_DIR/config/caelestia-fetch.py" ]]; then
+    # Lock screen avatar (replaces the generic "person" glyph in ProfilePic)
+    if [[ -f "$SCRIPT_DIR/config/face.png" ]]; then
+        cp -f "$SCRIPT_DIR/config/face.png" "$HOME/.face"
+        ok "Installed lock screen avatar to ~/.face"
+    fi
+
     # Copy Python script + ASCII logo art to caelestia config dir
     if [[ ! -d "$HOME/.config/caelestia" ]]; then
         mkdir -p "$HOME/.config/caelestia"
@@ -583,6 +622,13 @@ env = LD_LIBRARY_PATH,'"$QT_PREFIX"'/lib:'"$HOME"'/.local/lib:${LD_LIBRARY_PATH}
     else
         ok "Qt 6.11 env vars already in Hyprland ENVariables.conf"
     fi
+
+    # caelestia CLI defaults to ~/Pictures/Wallpapers (capital W); point it at
+    # the actual lowercase dir so `caelestia wallpaper -r` finds wallpapers.
+    if ! grep -q "CAELESTIA_WALLPAPERS_DIR" "$USER_ENVVARS" 2>/dev/null; then
+        echo "env = CAELESTIA_WALLPAPERS_DIR,$HOME/Pictures/wallpapers" >> "$USER_ENVVARS"
+        ok "Added CAELESTIA_WALLPAPERS_DIR to ENVariables.conf"
+    fi
 fi
 
 # Add caelestia keybinds to Hyprland user keybinds config
@@ -625,6 +671,23 @@ EOF
         KEYBINDS_CHANGED=true
     else
         ok "Caelestia keybinds already in UserKeybinds.conf"
+    fi
+
+    # ── Wallpaper keybinds (random wall + scheme toggle) ──
+    if [[ -f "$SCRIPT_DIR/config/hypr/scripts/toggle-scheme.sh" ]]; then
+        mkdir -p "$HOME/.config/hypr/scripts"
+        cp -f "$SCRIPT_DIR/config/hypr/scripts/toggle-scheme.sh" "$HOME/.config/hypr/scripts/toggle-scheme.sh"
+        chmod +x "$HOME/.config/hypr/scripts/toggle-scheme.sh"
+    fi
+    if ! grep -q "Random caelestia wallpaper" "$USER_KEYBINDS" 2>/dev/null; then
+        cat >> "$USER_KEYBINDS" << 'EOF'
+
+# Caelestia wallpaper controls
+bindd = SUPER, W, Random caelestia wallpaper, exec, caelestia wallpaper -r
+bindd = SUPER SHIFT, W, Toggle dark/light scheme, exec, ~/.config/hypr/scripts/toggle-scheme.sh
+EOF
+        ok "Added wallpaper keybinds (Super+W / Super+Shift+W)"
+        KEYBINDS_CHANGED=true
     fi
 
     # ── FIX: Add nexus keybind if missing ──

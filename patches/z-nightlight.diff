@@ -70,14 +70,14 @@ new file mode 100644
 +    Process {
 +        id: availProc
 +        running: true
-+        command: ["sh", "-c", "command -v hyprsunset >/dev/null 2>&1 && echo hyprsunset || (command -v wlsunset >/dev/null 2>&1 && echo wlsunset || echo none)"]
++        command: ["sh", "-c", "PATH=\"$HOME/.local/bin:$PATH\"; command -v hyprsunset >/dev/null 2>&1 && echo hyprsunset || (command -v wlsunset >/dev/null 2>&1 && echo wlsunset || echo none)"]
 +        stdout: StdioCollector {
 +            onStreamFinished: {
 +                const v = text.trim();
 +                if (v === "hyprsunset" || v === "wlsunset") {
 +                    root._backend = v;
 +                    root.available = true;
-+                    if (v === "hyprsunset") Quickshell.execDetached(["sh", "-c", "pkill wlsunset 2>/dev/null; true"]);
++                    if (v === "hyprsunset") Quickshell.execDetached(["sh", "-c", "PATH=\"$HOME/.local/bin:$PATH\" pkill wlsunset 2>/dev/null; true"]);
 +                    if (root._loaded) Qt.callLater(() => root._apply());
 +                } else {
 +                    root.available = false;
@@ -90,14 +90,14 @@ new file mode 100644
 +    Process {
 +        id: hyprDaemon
 +        running: root.available && root._backend === "hyprsunset"
-+        command: ["hyprsunset", "--identity"]
++        command: ["sh", "-c", "PATH=\"$HOME/.local/bin:$PATH\" LD_LIBRARY_PATH=\"$HOME/.local/lib:$LD_LIBRARY_PATH\" exec hyprsunset --identity"]
 +        onRunningChanged: if (running && root._loaded) Qt.callLater(() => root._apply())
 +    }
 +
 +    Process {
 +        id: wlsDaemon
 +        running: root.available && root._backend === "wlsunset" && root.enabled && root._loaded
-+        command: ["wlsunset", "-T", String(root.temperature + 1), "-t", String(root.temperature), "-S", "06:00", "-s", "06:01", "-g", "1.0"]
++        command: ["sh", "-c", "PATH=\"$HOME/.local/bin:$PATH\" exec wlsunset -T " + String(root.temperature + 1) + " -t " + String(root.temperature) + " -S 06:00 -s 06:01 -g 1.0"]
 +    }
 +
 +    Timer { id: retryTimer; interval: 220; onTriggered: root._apply() }
@@ -207,7 +207,7 @@ new file mode 100644
 +            first: false
 +            last: false
 +            text: qsTr("Night light")
-+            subtext: NightLight.available ? qsTr("Warm display filter") : qsTr("Install wlsunset package")
++            subtext: NightLight.available ? qsTr("Warm display filter (%1)").arg(NightLight._backend) : qsTr("Install hyprsunset or wlsunset package")
 +            enabled: NightLight.available
 +            checked: NightLight.enabled
 +            onToggled: NightLight.setEnabled(checked)

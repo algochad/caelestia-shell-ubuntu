@@ -673,11 +673,21 @@ env = LD_LIBRARY_PATH,'"$QT_PREFIX"'/lib:'"$HOME"'/.local/lib:${LD_LIBRARY_PATH}
             echo "" >> "$USER_ENVVARS"
             echo "### Qt 6.11 (caelestia shell) ###" >> "$USER_ENVVARS"
             echo "env = QML_IMPORT_PATH,$HOME/.config/quickshell/caelestia/build/qml:$QT_PREFIX/qml:/usr/lib/qt6/qml" >> "$USER_ENVVARS"
-            echo "env = LD_LIBRARY_PATH,$QT_PREFIX/lib:\${LD_LIBRARY_PATH}" >> "$USER_ENVVARS"
         fi
         ok "Added Qt 6.11 env vars to Hyprland ENVariables.conf"
     else
         ok "Qt 6.11 env vars already in Hyprland ENVariables.conf"
+    fi
+    # Ensure nightly backend PATH/LD are present (hyprsunset lives in ~/.local/bin, needs ~/.local/lib)
+    if ! grep -q 'PATH,.*\.local/bin' "$USER_ENVVARS" 2>/dev/null; then
+        if grep -q '^### QT Variables ###' "$USER_ENVVARS" 2>/dev/null; then
+            sed -i '/^### QT Variables ###/i env = PATH,/home\/algochad\/.local\/bin:${PATH}\n' "$USER_ENVVARS" 2>&1 | head -3
+            sed -i 's|env = LD_LIBRARY_PATH,.*|env = LD_LIBRARY_PATH,'"$QT_PREFIX"'/lib:/home/algochad/.local/lib:${LD_LIBRARY_PATH}|' "$USER_ENVVARS" 2>&1 | head -3
+        else
+            grep -q 'PATH,.*\.local/bin' "$USER_ENVVARS" 2>/dev/null || echo 'env = PATH,/home/algochad/.local/bin:${PATH}' >> "$USER_ENVVARS"
+            grep -q '\.local/lib' "$USER_ENVVARS" 2>/dev/null || echo 'env = LD_LIBRARY_PATH,/home/algochad/qt6.11/6.11.2/gcc_64/lib:/home/algochad/.local/lib:${LD_LIBRARY_PATH}' >> "$USER_ENVVARS"
+        fi
+        ok "Ensured PATH/LD for hyprsunset in ENVariables.conf"
     fi
 
     # caelestia CLI defaults to ~/Pictures/Wallpapers (capital W); point it at

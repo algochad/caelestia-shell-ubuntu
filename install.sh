@@ -323,11 +323,22 @@ cmake -GNinja -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo \
 cmake --build build
 
 # Install user-local: ~/.local/bin precedes /usr/local/bin in PATH, no sudo needed
+# Kill running qs (Text file busy if we try to overwrite an executing binary)
+if pgrep -x qs >/dev/null 2>&1 || pgrep -x quickshell >/dev/null 2>&1 || pgrep -f "qs -c caelestia" >/dev/null 2>&1; then
+    info "Stopping running quickshell (needed to replace binary)..."
+    pkill -x qs 2>/dev/null || true
+    pkill -x quickshell 2>/dev/null || true
+    pkill -f "qs -c caelestia" 2>/dev/null || true
+    for _ in 1 2 3 4 5; do
+        pgrep -x qs >/dev/null 2>&1 || pgrep -x quickshell >/dev/null 2>&1 || break
+        sleep 0.5
+    done
+fi
 mkdir -p "$HOME/.local/bin"
-cp build/src/quickshell "$HOME/.local/bin/qs"
-chmod 755 "$HOME/.local/bin/qs"
-
-ok "Quickshell installed to ~/.local/bin/qs"
+# Use cat+mv to avoid ETXTBSY when overwriting a running binary
+cat build/src/quickshell > "$HOME/.local/bin/qs.tmp"
+chmod 755 "$HOME/.local/bin/qs.tmp"
+mv -f "$HOME/.local/bin/qs.tmp" "$HOME/.local/bin/qs"
 
 # ── Step 4: Build libcava ────────────────────────────────────────────────────
 step "Step 4/15: Building libcava (LukashonakV fork)"

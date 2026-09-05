@@ -320,8 +320,10 @@ cmake -GNinja -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DCRASH_HANDLER=OFF \
     -DINSTALL_QML_PREFIX=lib/qt6/qml
 
-cmake --build build
-
+if ! cmake --build build; then
+    warn "Parallel build failed (Ninja race on mocs_compilation), retrying single-threaded..."
+    cmake --build build -j1
+fi
 # Install user-local: ~/.local/bin precedes /usr/local/bin in PATH, no sudo needed
 # Kill running qs (Text file busy if we try to overwrite an executing binary)
 if pgrep -x qs >/dev/null 2>&1 || pgrep -x quickshell >/dev/null 2>&1 || pgrep -f "qs -c caelestia" >/dev/null 2>&1; then

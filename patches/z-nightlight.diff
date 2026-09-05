@@ -2,7 +2,7 @@ diff --git a/services/NightLight.qml b/services/NightLight.qml
 new file mode 100644
 --- /dev/null
 +++ b/services/NightLight.qml
-@@ -0,0 +1,108 @@
+@@ -0,0 +1,150 @@
 +pragma Singleton
 +pragma ComponentBehavior: Bound
 +
@@ -23,11 +23,10 @@ new file mode 100644
 +    property bool available: false
 +    property bool _loaded: false
 +    readonly property string statePath: `${Paths.state}/nightlight.json`
++    property string _backend: "hyprsunset"
 +
-+    // --- persistence ---
 +    FileView {
 +        id: storage
-+
 +        path: root.statePath
 +        printErrors: false
 +        watchChanges: true
@@ -40,16 +39,18 @@ new file mode 100644
 +                    root.temperature = Math.max(root.minTemp, Math.min(root.maxTemp, t));
 +                }
 +            } catch (e) {
-+                console.warn("[NightLight] failed to parse", root.statePath, e);
++                console.warn("[NightLight] parse fail", e);
 +            }
 +            root._loaded = true;
++            Qt.callLater(() => root._apply());
 +        }
 +        onLoadFailed: err => {
 +            if (err === FileViewError.FileNotFound) {
 +                root._loaded = true;
 +                Qt.callLater(() => setText(JSON.stringify({ enabled: root.enabled, temperature: root.temperature })));
++                Qt.callLater(() => root._apply());
 +            } else {
-+                console.warn("[NightLight] load failed", err);
++                console.warn("[NightLight] load fail", err);
 +                root._loaded = true;
 +            }
 +        }
@@ -64,47 +65,88 @@ new file mode 100644
 +            storage.setText(JSON.stringify({ enabled: root.enabled, temperature: root.temperature }));
 +        }
 +    }
-+
 +    function save(): void { if (root._loaded) saveTimer.restart(); }
 +
-+    // --- availability ---
 +    Process {
 +        id: availProc
 +        running: true
-+        command: ["sh", "-c", "command -v wlsunset >/dev/null 2>&1 && echo yes || echo no"]
++        command: ["sh", "-c", "command -v hyprsunset >/dev/null 2>&1 && echo hyprsunset || (command -v wlsunset >/dev/null 2>&1 && echo wlsunset || echo none)"]
 +        stdout: StdioCollector {
 +            onStreamFinished: {
-+                root.available = text.trim() === "yes";
-+                if (!root.available) console.warn("[NightLight] wlsunset not found — install 'wlsunset' package");
++                const v = text.trim();
++                if (v === "hyprsunset" || v === "wlsunset") {
++                    root._backend = v;
++                    root.available = true;
++                    if (v === "hyprsunset") Quickshell.execDetached(["sh", "-c", "pkill wlsunset 2>/dev/null; true"]);
++                    if (root._loaded) Qt.callLater(() => root._apply());
++                } else {
++                    root.available = false;
++                    console.warn("[NightLight] no backend — install hyprsunset or wlsunset");
++                }
 +            }
 +        }
 +    }
 +
-+    // --- daemon: wlsunset always-on at current temp (T==t) ---
 +    Process {
-+        id: daemonProc
-+        running: root.enabled && root.available && root._loaded
-+        command: ["wlsunset", "-T", String(root.temperature + 1), "-t", String(root.temperature), "-S", "06:00", "-s", "06:01", "-g", "1.0"]
-+        stdout: StdioCollector { onStreamFinished: if (text.length) console.log("[NightLight]", text.trim()) }
-+        stderr: StdioCollector { onStreamFinished: if (text.length) console.warn("[NightLight]", text.trim()) }
-+        onRunningChanged: console.log("[NightLight] daemon", running ? "start" : "stop", "temp", root.temperature)
++        id: hyprDaemon
++        running: root.available && root._backend === "hyprsunset"
++        command: ["hyprsunset", "--identity"]
++        onRunningChanged: if (running && root._loaded) Qt.callLater(() => root._apply())
 +    }
 +
-+    function setEnabled(v: bool): void { if (root.enabled === v) return; root.enabled = v; save(); }
++    Process {
++        id: wlsDaemon
++        running: root.available && root._backend === "wlsunset" && root.enabled && root._loaded
++        command: ["wlsunset", "-T", String(root.temperature + 1), "-t", String(root.temperature), "-S", "06:00", "-s", "06:01", "-g", "1.0"]
++    }
++
++    Timer { id: retryTimer; interval: 220; onTriggered: root._apply() }
++    Timer { id: tempDebounce; interval: 18; onTriggered: root._applyHypr() }
++
++    function _apply(): void {
++        if (!root._loaded || !root.available) return;
++        if (root._backend === "wlsunset") {
++            if (root.enabled && !wlsDaemon.running) wlsDaemon.running = true;
++            else if (!root.enabled && wlsDaemon.running) wlsDaemon.running = false;
++            else if (root.enabled && wlsDaemon.running) {
++                wlsDaemon.running = false;
++                Qt.callLater(() => { if (root.enabled) wlsDaemon.running = true; });
++            }
++            return;
++        }
++        _applyHypr();
++    }
++
++    function _applyHypr(): void {
++        if (!root._loaded || !root.available || root._backend !== "hyprsunset") return;
++        if (!hyprDaemon.running) { retryTimer.restart(); return; }
++        if (root.enabled) Quickshell.execDetached(["hyprctl", "hyprsunset", "temperature", String(root.temperature)]);
++        else Quickshell.execDetached(["hyprctl", "hyprsunset", "identity"]);
++    }
++
++    onEnabledChanged: {
++        save();
++        tempDebounce.stop();
++        retryTimer.stop();
++        _apply();
++    }
++    onTemperatureChanged: {
++        save();
++        if (!root.enabled) return;
++        if (root._backend === "hyprsunset") tempDebounce.restart();
++        else _apply();
++    }
++
++    function setEnabled(v: bool): void { if (root.enabled === v) return; root.enabled = v; }
 +    function setTemperature(v: int): void {
 +        const c = Math.max(root.minTemp, Math.min(root.maxTemp, Math.round(v)));
 +        if (root.temperature === c) return;
 +        root.temperature = c;
-+        save();
-+        if (daemonProc.running) {
-+            daemonProc.running = false;
-+            Qt.callLater(() => { if (root.enabled && root.available) daemonProc.running = true; });
-+        }
 +    }
 +
 +    IpcHandler {
 +        target: "nightlight"
-+        function status(): string { return JSON.stringify({ enabled: root.enabled, temperature: root.temperature, available: root.available }); }
++        function status(): string { return JSON.stringify({ enabled: root.enabled, temperature: root.temperature, available: root.available, backend: root._backend }); }
 +        function enable(): string { root.setEnabled(true); return "enabled"; }
 +        function disable(): string { root.setEnabled(false); return "disabled"; }
 +        function toggle(): string { root.setEnabled(!root.enabled); return root.enabled ? "enabled" : "disabled"; }

@@ -2,7 +2,7 @@ diff --git a/services/NightLight.qml b/services/NightLight.qml
 new file mode 100644
 --- /dev/null
 +++ b/services/NightLight.qml
-@@ -0,0 +1,151 @@
+@@ -0,0 +1,150 @@
 +pragma Singleton
 +pragma ComponentBehavior: Bound
 +
@@ -67,7 +67,7 @@ new file mode 100644
 +    }
 +    function save(): void { if (root._loaded) saveTimer.restart(); }
 +
-+    // Absolute-path probe — Hyprland's PATH doesn't contain ~/.local/bin
++    // Hyprland's PATH is /usr/local/sbin:... so command -v misses ~/.local/bin
 +    Process {
 +        id: availProc
 +        running: true
@@ -88,11 +88,11 @@ new file mode 100644
 +        }
 +    }
 +
-+    // hyprsunset daemon — must stay alive for instant hyprctl (<10ms); cleans stale socket from crash
++    // hyprsunset daemon — lazy: only when enabled. Wrapper handles stale socket + env.
 +    Process {
 +        id: hyprDaemon
-+        running: root.available && root._backend === "hyprsunset"
-+        command: ["sh", "-c", "rm -f /run/user/1000/hypr/*/.hyprsunset.sock 2>/dev/null; rm -f \"${XDG_RUNTIME_DIR:-/run/user/1000}/hypr/\"*/.hyprsunset.sock 2>/dev/null; LD_LIBRARY_PATH=\"/home/algochad/.local/lib:${LD_LIBRARY_PATH:-}\" exec /home/algochad/.local/bin/hyprsunset --identity"]
++        running: root.available && root._backend === "hyprsunset" && root.enabled && root._loaded
++        command: ["/home/algochad/.local/bin/nightlight-hyprsunset"]
 +        onRunningChanged: if (running && root._loaded) Qt.callLater(() => root._apply())
 +    }
 +
@@ -121,12 +121,11 @@ new file mode 100644
 +    function _applyHypr(): void {
 +        if (!root._loaded || !root.available || root._backend !== "hyprsunset") return;
 +        if (!hyprDaemon.running) { retryTimer.restart(); return; }
-+        // execDetached — realtime, no Process queuing. Toggle and slider both instant.
-+        if (root.enabled) Quickshell.execDetached(["hyprctl", "hyprsunset", "temperature", String(root.temperature)]);
-+        else Quickshell.execDetached(["hyprctl", "hyprsunset", "identity"]);
++        // wrappers inject HYPRLAND_INSTANCE_SIGNATURE — qs has none after Hyprland restart
++        if (root.enabled) Quickshell.execDetached(["/home/algochad/.local/bin/nightlight-hyprctl", "temperature", String(root.temperature)]);
++        else Quickshell.execDetached(["/home/algochad/.local/bin/nightlight-hyprctl", "identity"]);
 +    }
 +
-+    // Toggle and slider are both realtime — no debounce
 +    onEnabledChanged: {
 +        save();
 +        retryTimer.stop();

@@ -649,8 +649,11 @@ if [[ -f ~/.config/hypr/configs/Startup_Apps.conf ]]; then
     if ! grep -q "caelestia shell" "$USER_STARTUP" 2>/dev/null; then
         echo "" >> "$USER_STARTUP"
         echo "# Caelestia Shell (installed by caelestia-shell-ubuntu)" >> "$USER_STARTUP"
-        echo "exec-once = caelestia shell -d" >> "$USER_STARTUP"
-        ok "Added caelestia shell to Hyprland startup"
+        echo "exec-once = sh -c 'HYPRLAND_INSTANCE_SIGNATURE=\$(ls /run/user/1000/hypr 2>/dev/null | head -n1); export HYPRLAND_INSTANCE_SIGNATURE; export WAYLAND_DISPLAY=wayland-1; export XDG_RUNTIME_DIR=/run/user/1000; exec caelestia shell -d'" >> "$USER_STARTUP"
+        ok "Added caelestia shell to Hyprland startup (with Hyprland env)"
+    elif grep -q "exec-once = caelestia shell -d$" "$USER_STARTUP" 2>/dev/null; then
+        sed -i "s|^exec-once = caelestia shell -d$|exec-once = sh -c 'HYPRLAND_INSTANCE_SIGNATURE=\$(ls /run/user/1000/hypr 2>/dev/null | head -n1); export HYPRLAND_INSTANCE_SIGNATURE; export WAYLAND_DISPLAY=wayland-1; export XDG_RUNTIME_DIR=/run/user/1000; exec caelestia shell -d'|" "$USER_STARTUP"
+        ok "Updated caelestia shell startup to inject Hyprland env"
     else
         ok "caelestia shell already in Hyprland startup"
     fi
@@ -661,37 +664,25 @@ USER_ENVVARS="$HOME/.config/hypr/UserConfigs/ENVariables.conf"
 if [[ -f "$USER_ENVVARS" ]]; then
     if ! grep -q "QML_IMPORT_PATH.*qt6.11" "$USER_ENVVARS" 2>/dev/null; then
         info "Adding Qt 6.11 env vars to Hyprland ENVariables.conf..."
-        # Prefer inserting before the standard QT Variables marker
         if grep -q '^### QT Variables ###' "$USER_ENVVARS" 2>/dev/null; then
             sed -i '/^### QT Variables ###/i \\
 ### Qt 6.11 (caelestia shell) ###\\
-env = QML_IMPORT_PATH,'"$HOME"'/.config/quickshell/caelestia/build/qml:'"$QT_PREFIX"'/qml:/usr/lib/qt6/qml\\
+env = QML_IMPORT_PATH,'"$HOME"'/.config/quickshell/caelestia/build/qml:'"$QT_PREFIX"'/qml:/usr/lib/qt6/qml:/usr/lib/x86_64-linux-gnu/qt6/qml\\
 env = LD_LIBRARY_PATH,'"$QT_PREFIX"'/lib:'"$HOME"'/.local/lib:${LD_LIBRARY_PATH}\\
 ' "$USER_ENVVARS"
         else
-            # Fallback: append to end of file
             echo "" >> "$USER_ENVVARS"
             echo "### Qt 6.11 (caelestia shell) ###" >> "$USER_ENVVARS"
-            echo "env = QML_IMPORT_PATH,$HOME/.config/quickshell/caelestia/build/qml:$QT_PREFIX/qml:/usr/lib/qt6/qml" >> "$USER_ENVVARS"
+            echo "env = QML_IMPORT_PATH,$HOME/.config/quickshell/caelestia/build/qml:$QT_PREFIX/qml:/usr/lib/qt6/qml:/usr/lib/x86_64-linux-gnu/qt6/qml" >> "$USER_ENVVARS"
         fi
         ok "Added Qt 6.11 env vars to Hyprland ENVariables.conf"
+    elif ! grep -q "x86_64-linux-gnu" "$USER_ENVVARS" 2>/dev/null; then
+        sed -i 's|/usr/lib/qt6/qml$|/usr/lib/qt6/qml:/usr/lib/x86_64-linux-gnu/qt6/qml|' "$USER_ENVVARS"
+        ok "Patched ENVariables.conf to add arch-specific Qt6 QML path"
     else
         ok "Qt 6.11 env vars already in Hyprland ENVariables.conf"
     fi
-    # Ensure nightly backend PATH/LD are present (hyprsunset lives in ~/.local/bin, needs ~/.local/lib)
-    if ! grep -q 'PATH,.*\.local/bin' "$USER_ENVVARS" 2>/dev/null; then
-        if grep -q '^### QT Variables ###' "$USER_ENVVARS" 2>/dev/null; then
-            sed -i '/^### QT Variables ###/i env = PATH,/home\/algochad\/.local\/bin:${PATH}\n' "$USER_ENVVARS" 2>&1 | head -3
-            sed -i 's|env = LD_LIBRARY_PATH,.*|env = LD_LIBRARY_PATH,'"$QT_PREFIX"'/lib:/home/algochad/.local/lib:${LD_LIBRARY_PATH}|' "$USER_ENVVARS" 2>&1 | head -3
-        else
-            grep -q 'PATH,.*\.local/bin' "$USER_ENVVARS" 2>/dev/null || echo 'env = PATH,/home/algochad/.local/bin:${PATH}' >> "$USER_ENVVARS"
-            grep -q '\.local/lib' "$USER_ENVVARS" 2>/dev/null || echo 'env = LD_LIBRARY_PATH,/home/algochad/qt6.11/6.11.2/gcc_64/lib:/home/algochad/.local/lib:${LD_LIBRARY_PATH}' >> "$USER_ENVVARS"
-        fi
-        ok "Ensured PATH/LD for hyprsunset in ENVariables.conf"
-    fi
 
-    # caelestia CLI defaults to ~/Pictures/Wallpapers (capital W); point it at
-    # the actual lowercase dir so `caelestia wallpaper -r` finds wallpapers.
     if ! grep -q "CAELESTIA_WALLPAPERS_DIR" "$USER_ENVVARS" 2>/dev/null; then
         echo "env = CAELESTIA_WALLPAPERS_DIR,$HOME/Pictures/wallpapers" >> "$USER_ENVVARS"
         ok "Added CAELESTIA_WALLPAPERS_DIR to ENVariables.conf"

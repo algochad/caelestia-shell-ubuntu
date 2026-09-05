@@ -2,7 +2,7 @@ diff --git a/services/NightLight.qml b/services/NightLight.qml
 new file mode 100644
 --- /dev/null
 +++ b/services/NightLight.qml
-@@ -0,0 +1,150 @@
+@@ -0,0 +1,151 @@
 +pragma Singleton
 +pragma ComponentBehavior: Bound
 +
@@ -58,7 +58,7 @@ new file mode 100644
 +
 +    Timer {
 +        id: saveTimer
-+        interval: 400
++        interval: 380
 +        repeat: false
 +        onTriggered: {
 +            if (!root._loaded) return;
@@ -67,17 +67,18 @@ new file mode 100644
 +    }
 +    function save(): void { if (root._loaded) saveTimer.restart(); }
 +
++    // Absolute-path probe — Hyprland's PATH doesn't contain ~/.local/bin
 +    Process {
 +        id: availProc
 +        running: true
-+        command: ["sh", "-c", "PATH=\"$HOME/.local/bin:$PATH\"; command -v hyprsunset >/dev/null 2>&1 && echo hyprsunset || (command -v wlsunset >/dev/null 2>&1 && echo wlsunset || echo none)"]
++        command: ["sh", "-c", "if [ -x /home/algochad/.local/bin/hyprsunset ]; then echo hyprsunset; exit 0; fi; if [ -x /home/algochad/.local/bin/wlsunset ]; then echo wlsunset; exit 0; fi; command -v hyprsunset >/dev/null 2>&1 && echo hyprsunset && exit 0; command -v wlsunset >/dev/null 2>&1 && echo wlsunset && exit 0; echo none"]
 +        stdout: StdioCollector {
 +            onStreamFinished: {
 +                const v = text.trim();
 +                if (v === "hyprsunset" || v === "wlsunset") {
 +                    root._backend = v;
 +                    root.available = true;
-+                    if (v === "hyprsunset") Quickshell.execDetached(["sh", "-c", "PATH=\"$HOME/.local/bin:$PATH\" pkill wlsunset 2>/dev/null; true"]);
++                    if (v === "hyprsunset") Quickshell.execDetached(["sh", "-c", "pkill wlsunset 2>/dev/null; true"]);
 +                    if (root._loaded) Qt.callLater(() => root._apply());
 +                } else {
 +                    root.available = false;
@@ -87,21 +88,21 @@ new file mode 100644
 +        }
 +    }
 +
++    // hyprsunset daemon — must stay alive for instant hyprctl (<10ms); cleans stale socket from crash
 +    Process {
 +        id: hyprDaemon
 +        running: root.available && root._backend === "hyprsunset"
-+        command: ["sh", "-c", "PATH=\"$HOME/.local/bin:$PATH\" LD_LIBRARY_PATH=\"$HOME/.local/lib:$LD_LIBRARY_PATH\" exec hyprsunset --identity"]
++        command: ["sh", "-c", "rm -f /run/user/1000/hypr/*/.hyprsunset.sock 2>/dev/null; rm -f \"${XDG_RUNTIME_DIR:-/run/user/1000}/hypr/\"*/.hyprsunset.sock 2>/dev/null; LD_LIBRARY_PATH=\"/home/algochad/.local/lib:${LD_LIBRARY_PATH:-}\" exec /home/algochad/.local/bin/hyprsunset --identity"]
 +        onRunningChanged: if (running && root._loaded) Qt.callLater(() => root._apply())
 +    }
 +
 +    Process {
 +        id: wlsDaemon
 +        running: root.available && root._backend === "wlsunset" && root.enabled && root._loaded
-+        command: ["sh", "-c", "PATH=\"$HOME/.local/bin:$PATH\" exec wlsunset -T " + String(root.temperature + 1) + " -t " + String(root.temperature) + " -S 06:00 -s 06:01 -g 1.0"]
++        command: ["sh", "-c", "exec /home/algochad/.local/bin/wlsunset -T " + String(root.temperature + 1) + " -t " + String(root.temperature) + " -S 06:00 -s 06:01 -g 1.0"]
 +    }
 +
-+    Timer { id: retryTimer; interval: 220; onTriggered: root._apply() }
-+    Timer { id: tempDebounce; interval: 18; onTriggered: root._applyHypr() }
++    Timer { id: retryTimer; interval: 260; onTriggered: root._apply() }
 +
 +    function _apply(): void {
 +        if (!root._loaded || !root.available) return;
@@ -120,21 +121,21 @@ new file mode 100644
 +    function _applyHypr(): void {
 +        if (!root._loaded || !root.available || root._backend !== "hyprsunset") return;
 +        if (!hyprDaemon.running) { retryTimer.restart(); return; }
++        // execDetached — realtime, no Process queuing. Toggle and slider both instant.
 +        if (root.enabled) Quickshell.execDetached(["hyprctl", "hyprsunset", "temperature", String(root.temperature)]);
 +        else Quickshell.execDetached(["hyprctl", "hyprsunset", "identity"]);
 +    }
 +
++    // Toggle and slider are both realtime — no debounce
 +    onEnabledChanged: {
 +        save();
-+        tempDebounce.stop();
 +        retryTimer.stop();
 +        _apply();
 +    }
 +    onTemperatureChanged: {
 +        save();
 +        if (!root.enabled) return;
-+        if (root._backend === "hyprsunset") tempDebounce.restart();
-+        else _apply();
++        _apply();
 +    }
 +
 +    function setEnabled(v: bool): void { if (root.enabled === v) return; root.enabled = v; }

@@ -38,6 +38,26 @@ for _a in "$@"; do
 done
 [[ "${END4:-0}" = "1" ]] && WITH_END4=1
 
+# ── Build parallelism (OOM guard) ────────────────────────────────────────────
+# Hyprland 0.53.3 + Caelestia builds OOM-kill the kitty scope on 10 GiB machines
+# when Ninja uses all 8 cores. Cap jobs by available RAM + CPUs.
+# Override: JOBS=2 ./install.sh  or  --jobs=2
+JOBS="${JOBS:-}"
+for _a in "$@"; do case "$_a" in --jobs=*) JOBS="${_a#--jobs=}"; JOBS="${JOBS%=*}"; JOBS="${JOBS#*=}";; --jobs) JOBS="2";; esac; done
+if [[ -z "$JOBS" ]]; then
+    _nproc="$(nproc 2>/dev/null || echo 4)"
+    _mem_gb="$(free -g 2>/dev/null | awk '/^Mem:/{print $2}')"
+    if [[ -n "$_mem_gb" ]] && (( _mem_gb <= 12 )); then
+        JOBS=2
+    elif (( _nproc > 4 )); then
+        JOBS=4
+    else
+        JOBS="$_nproc"
+    fi
+fi
+export CMAKE_BUILD_PARALLEL_LEVEL="$JOBS"
+export NINJA_JOBS="$JOBS"
+
 # ── Colors ───────────────────────────────────────────────────────────────────
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -347,8 +367,8 @@ cmake -GNinja -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DCRASH_HANDLER=OFF \
     -DINSTALL_QML_PREFIX=lib/qt6/qml
 
-if ! cmake --build build; then
-    warn "Parallel build failed (Ninja race on mocs_compilation), retrying single-threaded..."
+if ! cmake --build build -- -j "$JOBS"; then
+    warn "Parallel build (-j$JOBS) failed (Ninja race on mocs_compilation), retrying single-threaded..."
     cmake --build build -j1
 fi
 # Install user-local: ~/.local/bin precedes /usr/local/bin in PATH, no sudo needed
@@ -493,9 +513,11 @@ cmake -B build -G Ninja \
     -DCMAKE_INSTALL_PREFIX=/ \
     -DCMAKE_INSTALL_RPATH="$QT_PREFIX/lib;/usr/lib/x86_64-linux-gnu:\$ORIGIN:\$ORIGIN/../lib:\$ORIGIN/lib"
 
-cmake --build build
+if ! cmake --build build -- -j "$JOBS"; then
+    warn "Parallel build (-j$JOBS) failed, retrying single-threaded..."
+    cmake --build build -j1
+fi
 sudo cmake --install build
-
 ok "Caelestia Shell installed"
 
 # ── Step 7: Ensure user-local qs wins over system quickshell ────────────────

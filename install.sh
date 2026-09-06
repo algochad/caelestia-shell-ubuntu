@@ -25,6 +25,19 @@ fi
 
 set -euo pipefail
 
+# ── Hybrid flag ───────────────────────────────────────────────────────────────
+# Default: plain Caelestia (identical to master). Opt-in End-4 layer:
+#   ./install.sh --with-end4   or   END4=1 ./install.sh
+# Explicit opt-out: --caelestia-only
+WITH_END4=0
+for _a in "$@"; do
+    case "$_a" in
+        --with-end4) WITH_END4=1 ;;
+        --caelestia-only) WITH_END4=0 ;;
+    esac
+done
+[[ "${END4:-0}" = "1" ]] && WITH_END4=1
+
 # ── Colors ───────────────────────────────────────────────────────────────────
 RED='\033[0;31m'
 GREEN='\033[0;32m'

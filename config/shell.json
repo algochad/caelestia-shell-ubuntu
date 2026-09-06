@@ -547,9 +547,18 @@
       }
     ]
   },
+  "ai": {
+    "systemPrompt": "You are a helpful assistant.",
+    "tool": "search",
+    "temperature": 0.5,
+    "model": "gemini-2.5-flash"
+  },
+  "overview": {
+    "enabled": false
+  },
   "paths": {
     "wallpaperDir": "/home/algochad/Pictures/wallpapers",
     "sessionGif": "root:/assets/kurukuru.gif",
     "mediaGif": "root:/assets/bongocat.gif"
-  }
+    }
 }

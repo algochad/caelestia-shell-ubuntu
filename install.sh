@@ -167,6 +167,20 @@ sudo apt install -y --fix-broken --no-install-recommends \
     libcli11-dev wlsunset \
 || warn "Some APT packages failed due to version conflicts (common with mesa-git PPAs). Continuing — you may need to resolve these manually."
 
+# ── End-4 extra deps (gated) ─────────────────────────────────────────────────
+if [[ "$WITH_END4" = 1 ]]; then
+    info "Installing End-4 hybrid extra dependencies (WITH_END4=1)..."
+    sudo apt install -y --no-install-recommends \
+        fuzzel jq libqalculate22 slurp swappy tesseract-ocr tesseract-ocr-eng \
+        wf-recorder hyprpicker wlogout libsoup-3-0 libportal-gtk4-1 gir1.2-gtk-4.0 \
+        pavucontrol-qt wireplumber pipewire-pulse playerctl brightnessctl ddcutil \
+        hypridle hyprlock cliphist 2>/dev/null \
+    || warn "Some End-4 extra deps failed — continuing (optional for hybrid)."
+    ok "End-4 extra dependencies step done"
+else
+    info "[SKIP] End-4 extra dependencies not requested (use --with-end4)"
+fi
+
 # ── mesa-git PPA workaround ──────────────────────────────────────────────────
 # The mesa-git PPA provides newer runtime libraries but may not provide
 # matching -dev packages, causing apt dependency conflicts. We extract missing
@@ -452,13 +466,21 @@ else
 fi
 
 # Apply local patches on top of upstream (idempotent: skips if already applied)
+# Gated: hypr-end4-conf.diff and caelestia-ai-overview.diff only when WITH_END4=1
 for patch_file in "$SCRIPT_DIR"/patches/*.diff; do
     [[ -e "$patch_file" ]] || continue
+    _base="$(basename "$patch_file")"
+    if [[ "$_base" == "hypr-end4-conf.diff" || "$_base" == "caelestia-ai-overview.diff" ]]; then
+        if [[ "$WITH_END4" != 1 ]]; then
+            info "[SKIP] End-4 patch not requested (use --with-end4): $_base"
+            continue
+        fi
+    fi
     if git apply --check "$patch_file" 2>/dev/null; then
         git apply "$patch_file"
-        info "Applied patch: $(basename "$patch_file")"
+        info "Applied patch: $_base"
     else
-        info "Patch already applied or upstream changed: $(basename "$patch_file")"
+        info "Patch already applied or upstream changed: $_base"
     fi
 done
 
@@ -891,6 +913,163 @@ if [[ -f ~/.config/hypr/hyprland.conf ]]; then
 fi
 
 ok "Configuration complete"
+
+# ── Step 8.5: End-4 Hypr conf (gated) ───────────────────────────────────────────
+if [[ "$WITH_END4" = 1 ]]; then
+    step "Step 8.5/15: Installing End-4 Hypr conf (hybrid)"
+    # Backup live hyprland.conf if not already backed up
+    if [[ -f "$HOME/.config/hypr/hyprland.conf" ]] && [[ ! -f "$HOME/.config/hypr/hyprland.conf.pre-end4" ]]; then
+        cp -f "$HOME/.config/hypr/hyprland.conf" "$HOME/.config/hypr/hyprland.conf.pre-end4"
+        ok "Backed up hyprland.conf → hyprland.conf.pre-end4"
+    fi
+    # Create End-4 layer dirs
+    mkdir -p "$HOME/.config/hypr/end4/custom"
+    mkdir -p "$HOME/.config/hypr/custom/scripts"
+    # Copy End-4 conf templates from repo
+    if [[ -d "$SCRIPT_DIR/config/hypr/end4" ]]; then
+        for src in "$SCRIPT_DIR"/config/hypr/end4/*.conf; do
+            [[ -e "$src" ]] || continue
+            cp -f "$src" "$HOME/.config/hypr/end4/"
+            info "Installed End-4 conf: $(basename "$src")"
+        done
+        for src in "$SCRIPT_DIR"/config/hypr/end4/custom/*.conf; do
+            [[ -e "$src" ]] || continue
+            dest="$HOME/.config/hypr/end4/custom/$(basename "$src")"
+            if [[ ! -f "$dest" ]]; then
+                cp -f "$src" "$dest"
+                info "Installed End-4 custom stub: $(basename "$src")"
+            else
+                ok "End-4 custom already exists: $(basename "$src")"
+            fi
+        done
+        # Ensure custom/colors.conf exists (sourced by hybrid hyprland.conf)
+        if [[ ! -f "$HOME/.config/hypr/end4/custom/colors.conf" ]]; then
+            echo "# End-4 hybrid — custom/colors.conf — user overrides" > "$HOME/.config/hypr/end4/custom/colors.conf"
+        fi
+        # Matugen theming: if matugen present, note; otherwise warn and keep static colors.conf
+        if command -v matugen &>/dev/null; then
+            ok "matugen available — colors.conf can be regenerated via matugen template"
+        else
+            warn "matugen not found — using static end4/colors.conf fallback (warning only)"
+        fi
+    else
+        warn "End-4 templates not found in $SCRIPT_DIR/config/hypr/end4"
+    fi
+    # Preserve toggle-scheme.sh
+    if [[ -f "$HOME/.config/hypr/scripts/toggle-scheme.sh" ]] && [[ ! -f "$SCRIPT_DIR/config/hypr/scripts/toggle-scheme.sh" ]]; then
+        cp -f "$HOME/.config/hypr/scripts/toggle-scheme.sh" "$SCRIPT_DIR/config/hypr/scripts/toggle-scheme.sh" 2>/dev/null || true
+    fi
+    if [[ -f "$SCRIPT_DIR/config/hypr/scripts/toggle-scheme.sh" ]]; then
+        mkdir -p "$HOME/.config/hypr/scripts"
+        cp -f "$SCRIPT_DIR/config/hypr/scripts/toggle-scheme.sh" "$HOME/.config/hypr/scripts/toggle-scheme.sh"
+        chmod +x "$HOME/.config/hypr/scripts/toggle-scheme.sh"
+        ok "Preserved toggle-scheme.sh"
+    fi
+    # Rewrite hyprland.conf to hybrid sourcing
+    if [[ -f "$SCRIPT_DIR/config/hypr/hyprland.conf.hybrid" ]]; then
+        # Keep original JaKooLit conf as backup if not yet
+        cp -f "$HOME/.config/hypr/hyprland.conf" "$HOME/.config/hypr/hyprland.conf.jakoolit.bak" 2>/dev/null || true
+        # Expand $HOME in template and write to live
+        sed "s|\$HOME|$HOME|g" "$SCRIPT_DIR/config/hypr/hyprland.conf.hybrid" > "$HOME/.config/hypr/hyprland.conf.new"
+        # Inject Qt 6.11 QML path from $QT_PREFIX (install-time var)
+        if [[ -n "${QT_PREFIX:-}" ]]; then
+            sed -i "s|\$HOME/.config/quickshell/caelestia/build/qml:$HOME/qt6.11/6.11.2/gcc_64/qml|$HOME/.config/quickshell/caelestia/build/qml:$QT_PREFIX/qml|g" "$HOME/.config/hypr/hyprland.conf.new" 2>/dev/null || true
+        fi
+        mv -f "$HOME/.config/hypr/hyprland.conf.new" "$HOME/.config/hypr/hyprland.conf"
+        ok "Rewrote hyprland.conf to End-4 hybrid sourcing"
+    else
+        warn "Hybrid hyprland.conf template not found"
+    fi
+    # Ensure Startup_Apps.conf collapses to single caelestia exec (sourced last, wins)
+    USER_STARTUP="$HOME/.config/hypr/UserConfigs/Startup_Apps.conf"
+    mkdir -p "$(dirname "$USER_STARTUP")"
+    if ! grep -q "caelestia shell -d" "$USER_STARTUP" 2>/dev/null; then
+        echo "exec-once = caelestia shell -d" >> "$USER_STARTUP"
+    fi
+    # Ensure Startup_Apps.conf has only one shell exec (comment stray qs -c ii)
+    if grep -q "qs -c ii" "$HOME/.config/hypr/end4/execs.conf" 2>/dev/null; then
+        sed -i 's/^exec-once = qs -c ii/# Disabled (hybrid: use caelestia only): qs -c ii/' "$HOME/.config/hypr/end4/execs.conf" 2>/dev/null || true
+    fi
+    if [[ -d "$HOME/.config/quickshell/ii" ]] && grep -rq "qs -c ii" "$HOME/.config/hypr/" 2>/dev/null; then
+        warn "Found stray ~/.config/quickshell/ii — left on disk, exec lines commented"
+        grep -rl "qs -c ii" "$HOME/.config/hypr/" 2>/dev/null | xargs -r sed -i 's/^exec-once = qs -c ii/# Disabled (hybrid): qs -c ii/' 2>/dev/null || true
+    fi
+    # ENVariables: ensure arch QML path remains last env source
+    USER_ENVVARS="$HOME/.config/hypr/UserConfigs/ENVariables.conf"
+    if [[ -f "$USER_ENVVARS" ]]; then
+        if ! grep -q "QML_IMPORT_PATH.*qt6.11" "$USER_ENVVARS" 2>/dev/null; then
+            echo "" >> "$USER_ENVVARS"
+            echo "### Qt 6.11 (caelestia shell) ###" >> "$USER_ENVVARS"
+            echo "env = QML_IMPORT_PATH,$HOME/.config/quickshell/caelestia/build/qml:${QT_PREFIX:-$HOME/qt6.11/6.11.2/gcc_64}/qml:/usr/lib/qt6/qml:/usr/lib/x86_64-linux-gnu/qt6/qml" >> "$USER_ENVVARS"
+            ok "Added Qt 6.11 env vars to ENVariables.conf (hybrid)"
+        fi
+        if ! grep -q "CAELESTIA_WALLPAPERS_DIR" "$USER_ENVVARS" 2>/dev/null; then
+            echo "env = CAELESTIA_WALLPAPERS_DIR,$HOME/Pictures/wallpapers" >> "$USER_ENVVARS"
+        fi
+    fi
+    # Remove JaKooLit layer (gated, preserve UserConfigs)
+    # configs/ defaults
+    for f in ENVariables.conf Keybinds.conf Startup_Apps.conf WindowRules.conf LayerRules.conf SystemSettings.conf Laptops.conf; do
+        if [[ -f "$HOME/.config/hypr/configs/$f" ]]; then
+            rm -f "$HOME/.config/hypr/configs/$f"
+            info "Removed JaKooLit configs/$f (hybrid)"
+        fi
+    done
+    # initial-boot.sh
+    if [[ -f "$HOME/.config/hypr/initial-boot.sh" ]]; then
+        rm -f "$HOME/.config/hypr/initial-boot.sh"
+        info "Removed initial-boot.sh (hybrid)"
+    fi
+    # wallust (generated)
+    if [[ -d "$HOME/.config/hypr/wallust" ]]; then
+        rm -rf "$HOME/.config/hypr/wallust"
+        info "Removed wallust/ (hybrid)"
+    fi
+    # Monitor_Profiles (already migrated to monitors.conf/workspaces.conf)
+    if [[ -d "$HOME/.config/hypr/Monitor_Profiles" ]]; then
+        # Keep if user has custom profiles not yet migrated; just warn
+        if [[ -f "$HOME/.config/hypr/monitors.conf" ]] && grep -q "monitor" "$HOME/.config/hypr/monitors.conf" 2>/dev/null; then
+            info "Monitor_Profiles/ present but monitors.conf already migrated — leaving for now (hybrid warns)"
+        fi
+    fi
+    # UserScripts legacy except toggle-scheme.sh
+    if [[ -d "$HOME/.config/hypr/UserScripts" ]]; then
+        # Preserve explicitly, remove known legacy scripts (RainbowBorders, Rofi*, Weather)
+        for rmf in RainbowBorders-low-cpu.sh RainbowBorders.bak.sh RofiBeats.sh RofiCalc.sh Weather.py Weather.sh WeatherWrap.sh; do
+            [[ -f "$HOME/.config/hypr/UserScripts/$rmf" ]] && rm -f "$HOME/.config/hypr/UserScripts/$rmf" && info "Removed UserScripts/$rmf (hybrid)"
+        done
+    fi
+    # lua + hl.meta.lua + hyprland.lua.disable (already inert)
+    if [[ -d "$HOME/.config/hypr/lua" ]]; then
+        rm -rf "$HOME/.config/hypr/lua"
+        info "Removed lua/ (hybrid)"
+    fi
+    [[ -f "$HOME/.config/hypr/hl.meta.lua" ]] && rm -f "$HOME/.config/hypr/hl.meta.lua" && info "Removed hl.meta.lua (hybrid)"
+    [[ -f "$HOME/.config/hypr/hyprland.lua.disable" ]] && rm -f "$HOME/.config/hypr/hyprland.lua.disable" && info "Removed hyprland.lua.disable (hybrid)"
+    # Verify keybinds rewritten
+    if grep -q "caelestia shell drawers toggle launcher" "$HOME/.config/hypr/end4/keybinds.conf" 2>/dev/null; then
+        ok "End-4 keybinds correctly rewrite launcher to Caelestia IPC"
+    else
+        warn "End-4 keybinds missing Caelestia launcher rewrite"
+    fi
+    # Attempt reload
+    if command -v hyprctl &>/dev/null; then
+        if hyprctl reload 2>&1 | head -n 20; then
+            ok "hyprctl reload succeeded (hybrid)"
+            hyprctl monitors 2>&1 | head -n 20 || true
+        else
+            warn "hyprctl reload failed — restoring from backup"
+            if [[ -f "$HOME/.config/hypr/hyprland.conf.pre-end4" ]]; then
+                cp -f "$HOME/.config/hypr/hyprland.conf.pre-end4" "$HOME/.config/hypr/hyprland.conf"
+                hyprctl reload 2>&1 | head -n 5 || true
+            fi
+        fi
+    else
+        warn "hyprctl not available — skipped reload"
+    fi
+else
+    info "[SKIP] End-4 hybrid not requested (use --with-end4)"
+fi
 
 # ── Step 9: Install mise ─────────────────────────────────────────────────────
 step "Step 9/15: Installing mise"

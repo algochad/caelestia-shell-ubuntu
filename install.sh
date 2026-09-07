@@ -24,6 +24,24 @@ if [[ -z "${BASH_SOURCE[0]:-}" ]] || [[ ! -f "${BASH_SOURCE[0]}" ]]; then
 fi
 
 set -euo pipefail
+# ── Build parallelism (OOM guard) ────────────────────────────────────────────
+# Full-parallel Ninja (8 jobs on 10 GiB RAM) OOM-kills the terminal scope
+# mid-build (systemd-oomd killed kitty scope twice in prior runs). Cap at 2
+# jobs on <=12 GiB machines, 4 otherwise. Override: JOBS=4 ./install.sh.
+JOBS="${JOBS:-}"
+if [[ -z "$JOBS" ]]; then
+    _nproc="$(nproc 2>/dev/null || echo 4)"
+    _mem_gb="$(free -g 2>/dev/null | awk '/^Mem:/{print $2}')"
+    if [[ -n "$_mem_gb" ]] && (( _mem_gb <= 12 )); then
+        JOBS=2
+    elif (( _nproc > 4 )); then
+        JOBS=4
+    else
+        JOBS="$_nproc"
+    fi
+fi
+export CMAKE_BUILD_PARALLEL_LEVEL="$JOBS"
+export NINJA_JOBS="$JOBS"
 
 # ── Colors ───────────────────────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -304,7 +322,7 @@ fi
 cd "$BUILD_DIR"
 if [[ -d quickshell ]]; then
     info "Quickshell source already cloned, pulling latest..."
-    cd quickshell && git pull
+    cd quickshell && git pull --ff-only || warn "quickshell git pull failed — continuing with existing checkout"
 else
     git clone https://git.outfoxxed.me/quickshell/quickshell.git
     cd quickshell
@@ -320,8 +338,8 @@ cmake -GNinja -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DCRASH_HANDLER=OFF \
     -DINSTALL_QML_PREFIX=lib/qt6/qml
 
-if ! cmake --build build; then
-    warn "Parallel build failed (Ninja race on mocs_compilation), retrying single-threaded..."
+if ! cmake --build build -- -j "$JOBS"; then
+    warn "Parallel build (-j$JOBS) failed (Ninja race on mocs_compilation), retrying single-threaded..."
     cmake --build build -j1
 fi
 # Install user-local: ~/.local/bin precedes /usr/local/bin in PATH, no sudo needed
@@ -348,7 +366,7 @@ step "Step 4/15: Building libcava (LukashonakV fork)"
 cd "$BUILD_DIR"
 if [[ -d libcava ]]; then
     info "libcava source already cloned, pulling latest..."
-    cd libcava && git pull
+    cd libcava && git pull --ff-only || warn "libcava git pull failed — continuing with existing checkout"
 else
     git clone https://github.com/LukashonakV/cava.git libcava
     cd libcava
@@ -357,7 +375,7 @@ fi
 rm -rf build
 meson setup build --buildtype=release -Ddefault_library=shared 2>/dev/null \
     || meson setup build --buildtype=release -Ddefault_library=shared
-meson compile -C build
+meson compile -C build -j "$JOBS"
 sudo meson install -C build
 
 # Library path
@@ -379,7 +397,7 @@ if [[ -d caelestia-cli ]]; then
     # Discard local keybinds patch so git pull can fast-forward
     git reset --hard HEAD >/dev/null 2>&1 || true
     git clean -fd >/dev/null 2>&1 || true
-    git pull
+    git pull --ff-only || warn "caelestia-cli git pull failed — continuing with existing checkout"
 else
     git clone https://github.com/caelestia-dots/cli.git caelestia-cli
     cd caelestia-cli
@@ -430,9 +448,18 @@ step "Step 6/15: Building Caelestia Shell"
 mkdir -p ~/.config/quickshell
 
 SHELL_DIR="$HOME/.config/quickshell/caelestia"
+# Upstream shell checkout only: never commit/push here. Our changes live as
+# patches/ in caelestia-shell-ubuntu and are applied below with git apply.
+# If the live checkout has drifted (applied patches), skip the pull so a
+# half-merged tree can never break `git apply --check` below.
 if [[ -d "$SHELL_DIR" ]]; then
     info "Caelestia Shell source already cloned, pulling latest..."
-    cd "$SHELL_DIR" && git pull
+    if git -C "$SHELL_DIR" diff --quiet 2>/dev/null && [[ -z "$(git -C "$SHELL_DIR" status --porcelain 2>/dev/null | grep -v '^??' || true)" ]]; then
+        git -C "$SHELL_DIR" pull --ff-only || warn "shell git pull failed — continuing with existing checkout"
+    else
+        warn "shell checkout has local patches — skipping pull (patches re-applied below)"
+    fi
+    cd "$SHELL_DIR"
 else
     git clone https://github.com/caelestia-dots/shell.git "$SHELL_DIR"
     cd "$SHELL_DIR"
@@ -458,7 +485,10 @@ cmake -B build -G Ninja \
     -DCMAKE_INSTALL_PREFIX=/ \
     -DCMAKE_INSTALL_RPATH="$QT_PREFIX/lib;/usr/lib/x86_64-linux-gnu:\$ORIGIN:\$ORIGIN/../lib:\$ORIGIN/lib"
 
-cmake --build build
+if ! cmake --build build -- -j "$JOBS"; then
+    warn "Parallel build (-j$JOBS) failed, retrying single-threaded..."
+    cmake --build build -j1
+fi
 sudo cmake --install build
 
 ok "Caelestia Shell installed"

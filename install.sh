@@ -683,6 +683,28 @@ if [[ -f ~/.config/hypr/configs/Startup_Apps.conf ]]; then
     sed -i 's/^exec-once = .*[Ww]aybar.*$/# Disabled by caelestia installer: using caelestia shell/' ~/.config/hypr/configs/Startup_Apps.conf 2>/dev/null || true
     sed -i 's/^exec-once = .*ags.*$/# Disabled by caelestia installer: using caelestia shell/' ~/.config/hypr/configs/Startup_Apps.conf 2>/dev/null || true
     sed -i 's/^exec-once = qs -c overview.*$/# Disabled by caelestia installer: using caelestia shell/' ~/.config/hypr/configs/Startup_Apps.conf 2>/dev/null || true
+    # Caelestia-only lockscreen: disable hypridle+hyprlock autostart (caelestia handles idle/lock)
+    sed -i 's/^exec-once = hypridle$/# Disabled by caelestia installer: using caelestia idle\/lock instead of hypridle+hyprlock/' ~/.config/hypr/configs/Startup_Apps.conf 2>/dev/null || true
+    # Point hypridle lock_cmd at caelestia (in case hypridle ever runs manually)
+    if [[ -f ~/.config/hypr/hypridle.conf ]] && grep -q "pidof hyprlock || hyprlock" ~/.config/hypr/hypridle.conf 2>/dev/null; then
+        sed -i 's|lock_cmd = pidof hyprlock || hyprlock|lock_cmd = caelestia shell lock lock # caelestia-only lock (hyprlock disabled)|' ~/.config/hypr/hypridle.conf 2>/dev/null || true
+        ok "Pointed hypridle lock_cmd at caelestia lock"
+    fi
+    # Point LockScreen.sh (Ctrl+Alt+L path) at caelestia instead of loginctl->hyprlock
+    if [[ -f ~/.config/hypr/scripts/LockScreen.sh ]] && grep -q "loginctl lock-session" ~/.config/hypr/scripts/LockScreen.sh 2>/dev/null; then
+        sed -i 's|^loginctl lock-session|caelestia shell lock lock # caelestia-only lock (hyprlock disabled)|' ~/.config/hypr/scripts/LockScreen.sh 2>/dev/null || true
+        ok "Pointed LockScreen.sh at caelestia lock"
+    fi
+    # Fix KeyHints.sh lock label (was hyprlock)
+    if [[ -f ~/.config/hypr/scripts/KeyHints.sh ]] && grep -q '"screen lock" "(hyprlock)"' ~/.config/hypr/scripts/KeyHints.sh 2>/dev/null; then
+        sed -i 's|"screen lock" "(hyprlock)"|"screen lock" "(caelestia)"|' ~/.config/hypr/scripts/KeyHints.sh 2>/dev/null || true
+        ok "Fixed KeyHints.sh lock label"
+    fi
+    # Mask + stop hypridle systemd autostart (/usr/lib/systemd/user preset enabled)
+    systemctl --user disable --now hypridle.service 2>/dev/null || true
+    systemctl --user mask hypridle.service 2>/dev/null || true
+    pkill -x hypridle 2>/dev/null || true
+    pkill -x hyprlock 2>/dev/null || true
 
     # Add caelestia to user startup config if not present
     USER_STARTUP="$HOME/.config/hypr/UserConfigs/Startup_Apps.conf"

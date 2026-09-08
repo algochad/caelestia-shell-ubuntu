@@ -980,6 +980,15 @@ restart_caelestia' "$SCRIPTS_DIR/Refresh.sh"
         ok "Patched Refresh.sh"
     fi
 
+    # Refresh.sh: also disable ags/bare-qs relaunches and swaync spawn (replaced by caelestia)
+    if [[ -f "$SCRIPTS_DIR/Refresh.sh" ]]; then
+        sed -i 's|^ags -q && ags &$|# Disabled by caelestia installer: ags removed (caelestia shell is the bar)|' "$SCRIPTS_DIR/Refresh.sh" 2>/dev/null || true
+        sed -i 's|^pkill qs && qs &$|# Disabled by caelestia installer: bare qs would replace the caelestia shell (restart_caelestia below handles it)|' "$SCRIPTS_DIR/Refresh.sh" 2>/dev/null || true
+        sed -i 's|^swaync >/dev/null 2>&1 &$|# Disabled by caelestia installer: caelestia shell is the notification daemon (no swaync)|' "$SCRIPTS_DIR/Refresh.sh" 2>/dev/null || true
+        sed -i 's|^swaync-client --reload-config$|# swaync-client --reload-config|' "$SCRIPTS_DIR/Refresh.sh" 2>/dev/null || true
+        ok "Neutralised swaync/ags/qs relaunches in Refresh.sh"
+    fi
+
     # DarkLight.sh: replace waybar kill with qs/quickshell
     if [[ -f "$SCRIPTS_DIR/DarkLight.sh" ]] && grep -q "killall.*waybar" "$SCRIPTS_DIR/DarkLight.sh"; then
         sed -i 's/for pid1 in waybar rofi swaync ags swaybg/for pid1 in qs quickshell rofi swaync ags swaybg/' "$SCRIPTS_DIR/DarkLight.sh"

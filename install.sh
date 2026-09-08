@@ -835,6 +835,52 @@ EOF
         ok "Added keybinds cheatsheet keybind (Super+Slash) to UserKeybinds.conf"
         KEYBINDS_CHANGED=true
     fi
+
+    # ── Neutralise JaKooLit menu/picker binds (caelestia replaces rofi/wallust/swaync/waybar/wlogout) ──
+    # Unbinds must be re-applied AFTER the bindd lines above and re-bind the keys caelestia owns.
+    if ! grep -q "JaKooLit menus/daemons replaced by caelestia" "$USER_KEYBINDS" 2>/dev/null; then
+        info "Unbinding JaKooLit-only menu keybinds (caelestia replaces them)..."
+        cat >> "$USER_KEYBINDS" << 'EOF'
+
+# ── JaKooLit menus/daemons replaced by caelestia: unbind vendor rofi/wallust/wlogout/swaync/waybar binds ──
+unbind = $mainMod, D          # rofi drun launcher (caelestia launcher: Super+Space)
+unbind = $mainMod, A          # quickshell/AGS overview (removed)
+unbind = $mainMod, S          # rofi web search
+unbind = $mainMod, H          # rofi keybind hints (cheatsheet: Super+Slash)
+unbind = $mainMod SHIFT, M    # rofi online music menu
+unbind = $mainMod ALT, E      # rofi emoji menu
+unbind = $mainMod CTRL, S     # rofi window switcher
+unbind = $mainMod CTRL, R     # rofi theme selector
+unbind = $mainMod CTRL SHIFT, R  # rofi theme selector (modified)
+unbind = $mainMod CTRL, K     # kitty theme selector
+unbind = $mainMod CTRL, G     # ghostty theme selector
+unbind = $mainMod SHIFT, K    # rofi keybind search
+unbind = $mainMod SHIFT, A    # rofi animations menu
+unbind = $mainMod SHIFT, O    # zsh theme menu
+unbind = $mainMod CTRL ALT, B # waybar toggle
+unbind = $mainMod CTRL, B     # waybar styles
+unbind = $mainMod ALT, B      # waybar layout
+unbind = $mainMod SHIFT, N    # swaync notification panel
+unbind = $mainMod, T          # wallust theme switcher (rebound to terminal)
+unbind = $mainMod, C          # rofi ssh menu (rebound to editor)
+unbind = $mainMod, W          # rofi wallpaper select (rebound to caelestia)
+unbind = $mainMod SHIFT, W    # wallpaper effects menu (rebound to scheme toggle)
+unbind = CTRL ALT, W          # swww random wallpaper
+unbind = $mainMod SHIFT, E    # JaKooLit quick settings (rebound to session drawer)
+unbind = $mainMod, N          # hyprsunset toggle (rebound to nexus)
+
+# Rebind keys owned by the official caelestia table (must follow the unbinds)
+bindd = SUPER, N, Open caelestia nexus, exec, caelestia shell nexus open
+bindd = SUPER SHIFT, E, Toggle session menu, exec, caelestia shell drawers toggle session
+bindd = SUPER, W, Random caelestia wallpaper, exec, caelestia wallpaper -r
+bindd = SUPER SHIFT, W, Toggle dark/light scheme, exec, ~/.config/hypr/scripts/toggle-scheme.sh
+bindd = SUPER, T, Open terminal, exec, $scriptsDir/LaunchTerminal.sh "$term"
+bindd = SUPER, C, Open editor (nvim), exec, $scriptsDir/LaunchTerminal.sh "$term" "nvim"
+bindd = CTRL ALT, P, Powermenu, exec, caelestia shell drawers toggle session
+EOF
+        ok "Unbound JaKooLit menu keybinds; caelestia equivalents rebound"
+        KEYBINDS_CHANGED=true
+    fi
 fi
 
 # Disable Waybar systemd autostart (JaKooLit/Hyprland-Dots enables it globally)
@@ -851,6 +897,62 @@ systemctl --user mask ags.service 2>/dev/null || true
 systemctl --user stop waybar.service 2>/dev/null || true
 systemctl --user stop ags.service 2>/dev/null || true
 ok "Waybar and AGS masked in systemd"
+
+# ── Remove JaKooLit UI stack that Caelestia replaces (idempotent) ──
+# Notification daemon: swaync -> caelestia shell (qs registers org.freedesktop.Notifications)
+systemctl --user disable --now swaync.service 2>/dev/null || true
+systemctl --user mask swaync.service 2>/dev/null || true
+pkill -x swaync 2>/dev/null || true
+# Wallpaper daemons: hyprpaper / awww / swww -> caelestia shell wallpaper layer
+systemctl --user disable --now hyprpaper.service 2>/dev/null || true
+systemctl --user mask hyprpaper.service 2>/dev/null || true
+pkill -x hyprpaper 2>/dev/null || true
+pkill -x awww-daemon 2>/dev/null || true
+pkill -x swww-daemon 2>/dev/null || true
+pkill -x wallust 2>/dev/null || true
+
+# Vendor startup hooks now owned by the shell/scheme CLI
+if [[ -f ~/.config/hypr/configs/Startup_Apps.conf ]]; then
+    sed -i 's|^exec-once = swaync$|# Disabled by caelestia installer: caelestia shell is the notification daemon|' ~/.config/hypr/configs/Startup_Apps.conf 2>/dev/null || true
+    sed -i 's|^exec-once = sh -c .sleep 2;.*WallpaperDaemon.sh.*$|# Disabled by caelestia installer: caelestia shell renders the wallpaper itself|' ~/.config/hypr/configs/Startup_Apps.conf 2>/dev/null || true
+    sed -i 's|^exec-once = sh .*ApplyThemeMode.sh.*$|# Disabled by caelestia installer: caelestia scheme CLI applies GTK/Qt/term themes|' ~/.config/hypr/configs/Startup_Apps.conf 2>/dev/null || true
+    ok "Disabled JaKooLit swaync/wallpaper/theme boot hooks"
+fi
+
+# hyprland.conf: drop the one-shot JaKooLit initial-boot hook
+if [[ -f ~/.config/hypr/hyprland.conf ]] && grep -q "initial-boot.sh" ~/.config/hypr/hyprland.conf 2>/dev/null; then
+    sed -i '/^exec-once = \$HOME\/.config\/hypr\/initial-boot.sh$/d' ~/.config/hypr/hyprland.conf 2>/dev/null || true
+    ok "Removed initial-boot.sh exec-once from hyprland.conf"
+fi
+
+# JaKooLit-only config dirs (features replaced by caelestia shell/CLI)
+for d in swaync waybar waybar-weather ags wlogout wallust rofi; do
+    rm -rf "$HOME/.config/$d"
+done
+# JaKooLit quickshell overview remnants (caelestia shell instance lives in ~/.config/quickshell/caelestia)
+rm -f "$HOME/.config/quickshell/GlobalStates.qml" "$HOME/.config/quickshell/config.json"
+rm -rf "$HOME/.config/quickshell/modules" "$HOME/.config/quickshell/overview" "$HOME/.config/quickshell/services"
+# hyprlock/hypridle configs (caelestia lock + idle)
+rm -f "$HOME/.config/hypr/hypridle.conf" "$HOME/.config/hypr/hyprlock.conf" \
+      "$HOME/.config/hypr/hyprlock-2k.conf" "$HOME/.config/hypr/hyprlock-1080p.conf" \
+      "$HOME/.config/hypr/hyprland.lua.disable" "$HOME/.config/hypr/initial-boot.sh" \
+      "$HOME/.config/hypr/.initial_startup_done"
+# fastfetch: keep only the caelestia config
+if [[ -d "$HOME/.config/fastfetch" ]]; then
+    find "$HOME/.config/fastfetch" -type f ! -name caelestia.jsonc -delete 2>/dev/null || true
+    rm -rf "$HOME/.config/fastfetch/images" 2>/dev/null || true
+fi
+# btop: drop JaKooLit catppuccin themes, adopt official caelestia config
+rm -f "$HOME/.config/btop/themes/catppuccin_*.theme" 2>/dev/null || true
+if [[ -f "$SCRIPT_DIR/config/btop/btop.conf" ]]; then
+    mkdir -p "$HOME/.config/btop"
+    cp -f "$SCRIPT_DIR/config/btop/btop.conf" "$HOME/.config/btop/btop.conf"
+fi
+# Dead JaKooLit menu scripts (wlogout / quick-settings / hyprlock wallpaper picker)
+rm -f "$HOME/.config/hypr/scripts/Kool_Quick_Settings.sh" \
+      "$HOME/.config/hypr/scripts/Wlogout.sh" \
+      "$HOME/.config/hypr/scripts/HyprlockWallpaperSelect.sh"
+ok "JaKooLit UI stack (swaync/waybar/ags/wlogout/wallust/rofi/overview) removed"
 
 # Patch JaKooLit theme/wallpaper scripts to restart caelestia instead of waybar
 if [[ -d ~/.config/hypr/scripts ]]; then

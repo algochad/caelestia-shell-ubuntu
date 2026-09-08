@@ -1081,6 +1081,40 @@ style = Fusion
 QTCFG
 ok "Dead JaKooLit scripts and Qt theme assets removed"
 
+# ── Official caelestia app configs (from caelestia-dots/caelestia) ──
+# Copies never clobber existing files (user may have customised them).
+# nvim: dynamic caelestia colorscheme (reads ~/.local/state/caelestia/scheme.json)
+if command -v nvim &>/dev/null; then
+    mkdir -p "$HOME/.config/nvim/colors" "$HOME/.config/nvim/lua/plugins"
+    [[ ! -f "$HOME/.config/nvim/colors/caelestia.lua" ]] && cp -f "$SCRIPT_DIR/config/nvim/colors/caelestia.lua" "$HOME/.config/nvim/colors/caelestia.lua"
+    [[ ! -f "$HOME/.config/nvim/lua/plugins/caelestia.lua" ]] && cp -f "$SCRIPT_DIR/config/nvim/lua/plugins/caelestia.lua" "$HOME/.config/nvim/lua/plugins/caelestia.lua"
+    ok "Installed caelestia nvim colorscheme"
+fi
+# fish: interactive config + greeting (guarded hooks for starship/direnv/zoxide/eza)
+if command -v fish &>/dev/null; then
+    mkdir -p "$HOME/.config/fish/functions"
+    [[ ! -f "$HOME/.config/fish/config.fish" ]] && cp -f "$SCRIPT_DIR/config/fish/config.fish" "$HOME/.config/fish/config.fish"
+    [[ ! -f "$HOME/.config/fish/functions/fish_greeting.fish" ]] && cp -f "$SCRIPT_DIR/config/fish/functions/fish_greeting.fish" "$HOME/.config/fish/functions/fish_greeting.fish"
+    ok "Installed caelestia fish config"
+fi
+# starship: drop JaKooLit preset dir; official prompt config (dormant until starship is installed)
+rm -rf "$HOME/.config/starship"
+mkdir -p "$HOME/.config"
+[[ ! -f "$HOME/.config/starship.toml" ]] && cp -f "$SCRIPT_DIR/config/starship.toml" "$HOME/.config/starship.toml"
+ok "Installed official starship.toml"
+# zed: settings + keymap next to the CLI-generated caelestia theme
+if [[ -d "$HOME/.config/zed" ]]; then
+    [[ ! -f "$HOME/.config/zed/settings.json" ]] && cp -f "$SCRIPT_DIR/config/zed/settings.json" "$HOME/.config/zed/settings.json"
+    [[ ! -f "$HOME/.config/zed/keymap.json" ]] && cp -f "$SCRIPT_DIR/config/zed/keymap.json" "$HOME/.config/zed/keymap.json"
+    ok "Installed caelestia zed settings"
+fi
+# VSCodium/VSCode: user settings + keybindings (theme extension installs via the IDE)
+if [[ -d "$HOME/.config/VSCodium/User" ]]; then
+    [[ ! -f "$HOME/.config/VSCodium/User/settings.json" ]] && cp -f "$SCRIPT_DIR/config/vscodium/settings.json" "$HOME/.config/VSCodium/User/settings.json"
+    [[ ! -f "$HOME/.config/VSCodium/User/keybindings.json" ]] && cp -f "$SCRIPT_DIR/config/vscodium/keybindings.json" "$HOME/.config/VSCodium/User/keybindings.json"
+    ok "Installed caelestia VSCodium settings"
+fi
+
 # Patch JaKooLit theme/wallpaper scripts to restart caelestia instead of waybar
 if [[ -d ~/.config/hypr/scripts ]]; then
     info "Patching JaKooLit Hyprland scripts for caelestia compatibility..."

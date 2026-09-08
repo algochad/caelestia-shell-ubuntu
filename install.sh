@@ -676,6 +676,22 @@ fi
 mkdir -p ~/Pictures/Wallpapers
 ok "Created ~/Pictures/Wallpapers/"
 
+# Optional: JaKooLit Wallpaper-Bank image pack (~1 GB download).
+# Pure image files only — no scripts/configs/branding — fetched from upstream
+# at install time (never vendored). Enable with: WALLPAPER_BANK=1 ./install.sh
+if [[ "${WALLPAPER_BANK:-0}" == "1" ]]; then
+    if [[ -f "$SCRIPT_DIR/fetch-wallpaper-bank.sh" ]]; then
+        info "WALLPAPER_BANK=1: fetching Wallpaper-Bank images (~1 GB, please wait)..."
+        if bash "$SCRIPT_DIR/fetch-wallpaper-bank.sh" "$HOME/Pictures/wallpapers"; then
+            ok "Wallpaper-Bank images added to ~/Pictures/wallpapers"
+        else
+            warn "Wallpaper-Bank fetch failed; continuing without it"
+        fi
+    else
+        warn "fetch-wallpaper-bank.sh missing; cannot fetch wallpaper pack"
+    fi
+fi
+
 # Hyprland configuration: disable Waybar/AGS, start caelestia
 if [[ -f ~/.config/hypr/configs/Startup_Apps.conf ]]; then
     info "Configuring Hyprland startup..."

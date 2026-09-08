@@ -976,6 +976,95 @@ if [[ -f ~/.config/hypr/configs/Startup_Apps.conf ]]; then
 fi
 ok "JaKooLit UI stack (swaync/waybar/ags/wlogout/wallust/rofi/overview) removed"
 
+# ── Deeper JaKooLit cleanup: dead menu/theme scripts + Qt theme assets ──
+# Scripts below are unbound and unreferenced by any remaining bind/exec-once or
+# kept script (kept set: autostarts + active binds + weather/refresh helpers).
+rm -f \
+  "$HOME/.config/hypr/scripts/Add-override-Hyprland-Portal.sh" \
+  "$HOME/.config/hypr/scripts/Animations.sh" \
+  "$HOME/.config/hypr/scripts/ApplyThemeMode.sh" \
+  "$HOME/.config/hypr/scripts/Battery.sh" \
+  "$HOME/.config/hypr/scripts/ChangeStarshipPrompt.sh" \
+  "$HOME/.config/hypr/scripts/DarkLight.sh" \
+  "$HOME/.config/hypr/scripts/DisableWaybarService.sh" \
+  "$HOME/.config/hypr/scripts/Distro_update.sh" \
+  "$HOME/.config/hypr/scripts/ExternalBrightness.sh" \
+  "$HOME/.config/hypr/scripts/Ghostty_themes.sh" \
+  "$HOME/.config/hypr/scripts/HyprLayoutModule.sh" \
+  "$HOME/.config/hypr/scripts/Hypridle.sh" \
+  "$HOME/.config/hypr/scripts/JavaManager.sh" \
+  "$HOME/.config/hypr/scripts/KeyBinds.sh" \
+  "$HOME/.config/hypr/scripts/KeyHints.sh" \
+  "$HOME/.config/hypr/scripts/Kitty_themes.sh" \
+  "$HOME/.config/hypr/scripts/KooLsDotsUpdate.sh" \
+  "$HOME/.config/hypr/scripts/LaunchThunar.sh" \
+  "$HOME/.config/hypr/scripts/LuaAutoReload.sh" \
+  "$HOME/.config/hypr/scripts/LuaFocusWorkspaceRelative.sh" \
+  "$HOME/.config/hypr/scripts/LuaFullscreenMaximized.sh" \
+  "$HOME/.config/hypr/scripts/LuaMoveWindowDirectional.sh" \
+  "$HOME/.config/hypr/scripts/LuaMoveWindowWorkspaceRelative.sh" \
+  "$HOME/.config/hypr/scripts/LuaSwapWindow.sh" \
+  "$HOME/.config/hypr/scripts/MonitorProfiles.sh" \
+  "$HOME/.config/hypr/scripts/OverviewToggle.sh" \
+  "$HOME/.config/hypr/scripts/Polkit-Diag.sh" \
+  "$HOME/.config/hypr/scripts/Polkit-NixOS.sh" \
+  "$HOME/.config/hypr/scripts/PortalHyprlandUbuntu.sh" \
+  "$HOME/.config/hypr/scripts/RefreshNoWaybar.sh" \
+  "$HOME/.config/hypr/scripts/ResizeActive.sh" \
+  "$HOME/.config/hypr/scripts/RofiEmoji.sh" \
+  "$HOME/.config/hypr/scripts/RofiFocusedWallpaperLink.sh" \
+  "$HOME/.config/hypr/scripts/RofiSearch.sh" \
+  "$HOME/.config/hypr/scripts/RofiThemeSelector-modified.sh" \
+  "$HOME/.config/hypr/scripts/RofiThemeSelector.sh" \
+  "$HOME/.config/hypr/scripts/ScrollMaximizeToggle.sh" \
+  "$HOME/.config/hypr/scripts/Sounds.sh" \
+  "$HOME/.config/hypr/scripts/Tak0-Autodispatch.sh" \
+  "$HOME/.config/hypr/scripts/ThemeChanger.sh" \
+  "$HOME/.config/hypr/scripts/Toggle-weather-waybar-units.sh" \
+  "$HOME/.config/hypr/scripts/ToggleWaybarTime.sh" \
+  "$HOME/.config/hypr/scripts/UptimeNixOS.sh" \
+  "$HOME/.config/hypr/scripts/UserConfigsSwitcher.sh" \
+  "$HOME/.config/hypr/scripts/WallpaperAutoChange.sh" \
+  "$HOME/.config/hypr/scripts/WallpaperCmd.sh" \
+  "$HOME/.config/hypr/scripts/WallpaperDaemon.sh" \
+  "$HOME/.config/hypr/scripts/WallpaperEffects.sh" \
+  "$HOME/.config/hypr/scripts/WallpaperRandom.sh" \
+  "$HOME/.config/hypr/scripts/WallpaperSelect.sh" \
+  "$HOME/.config/hypr/scripts/WallustConfig.sh" \
+  "$HOME/.config/hypr/scripts/WallustSwww.sh" \
+  "$HOME/.config/hypr/scripts/WaybarCava.sh" \
+  "$HOME/.config/hypr/scripts/WaybarLayout.sh" \
+  "$HOME/.config/hypr/scripts/WaybarScripts.sh" \
+  "$HOME/.config/hypr/scripts/WaybarStartup.sh" \
+  "$HOME/.config/hypr/scripts/WaybarStyles.sh" \
+  "$HOME/.config/hypr/scripts/ZshChangeTheme.sh" \
+  "$HOME/.config/hypr/scripts/build-awww.sh" \
+  "$HOME/.config/hypr/scripts/disable.cpu.turbo.sh" \
+  "$HOME/.config/hypr/scripts/fastfetch-wrapper.sh" \
+  "$HOME/.config/hypr/scripts/install-uv.sh" \
+  "$HOME/.config/hypr/scripts/kooldots-add-ssh-agent.sh" \
+  "$HOME/.config/hypr/scripts/rofi-ssh-menu.sh" \
+  "$HOME/.config/hypr/scripts/sddm_wallpaper.sh" \
+  "$HOME/.config/hypr/scripts/set-default-thunar-terminal.sh" \
+  "$HOME/.config/hypr/scripts/update_WindowRules.sh" \
+  "$HOME/.config/hypr/UserScripts/RainbowBorders.bak.sh" \
+  "$HOME/.config/hypr/UserScripts/RofiBeats.sh" 2>/dev/null || true
+rm -rf "$HOME/.config/kitty/kitty-themes" "$HOME/.config/Kvantum"
+# Point remaining notify-send icons at the caelestia logo (swaync assets are gone)
+find "$HOME/.config/hypr/scripts" "$HOME/.config/hypr/UserScripts" -name "*.sh" -exec \
+  sed -i 's|swaync/images/ja\.png|caelestia/logo.png|g; s|swaync/icons/music\.png|caelestia/logo.png|g; s|swaync/images/error\.png|caelestia/logo.png|g; s|"$iDIR/[^"]*\.png"|"$iDIR"|g; s|"${swayIconDir}/[^"]*\.png"|"${swayIconDir}"|g; s|swayIcon="${swayIconDir}/[^"]*\.png"|swayIcon="${swayIconDir}"|g; s|iDIR="${XDG_CONFIG_HOME:-$HOME/.config}/swaync/icons"|iDIR="$HOME/.config/caelestia/logo.png"|; s|iDIR="${XDG_CONFIG_HOME:-$HOME/.config}/swaync/images"|iDIR="$HOME/.config/caelestia/logo.png"|; s|swayIconDir="${XDG_CONFIG_HOME}/swaync/icons"|swayIconDir="$HOME/.config/caelestia/logo.png"|; s|/swaync/[^ ]*|/caelestia/logo.png|g' {} + 2>/dev/null || true
+# qt6ct: drop JaKooLit Catppuccin/Kvantum colour schemes; neutral Fusion + Papirus
+rm -f "$HOME/.config/qt6ct/qt6ct.conf" "$HOME/.config/qt5ct/qt5ct.conf"
+rm -rf "$HOME/.config/qt6ct/colors" "$HOME/.config/qt5ct/colors"
+mkdir -p "$HOME/.config/qt6ct"
+cat > "$HOME/.config/qt6ct/qt6ct.conf" << 'QTCFG'
+[Appearance]
+icon_theme = Papirus-Dark
+standard_dialogs = default
+style = Fusion
+QTCFG
+ok "Dead JaKooLit scripts and Qt theme assets removed"
+
 # Patch JaKooLit theme/wallpaper scripts to restart caelestia instead of waybar
 if [[ -d ~/.config/hypr/scripts ]]; then
     info "Patching JaKooLit Hyprland scripts for caelestia compatibility..."
@@ -1000,6 +1089,14 @@ restart_caelestia() {\
 \
 restart_caelestia' "$SCRIPTS_DIR/Refresh.sh"
         ok "Patched Refresh.sh"
+    fi
+
+    # GameMode.sh: replace JaKooLit version (swaync icon + swww/awww/wallust/Refresh
+    # pipeline) with the caelestia version — disable = plain config reload
+    if [[ -f "$SCRIPT_DIR/config/hypr/scripts/GameMode.sh" ]]; then
+        cp -f "$SCRIPT_DIR/config/hypr/scripts/GameMode.sh" "$SCRIPTS_DIR/GameMode.sh"
+        chmod +x "$SCRIPTS_DIR/GameMode.sh"
+        ok "Installed caelestia GameMode.sh"
     fi
 
     # Refresh.sh: also disable ags/bare-qs relaunches and swaync spawn (replaced by caelestia)
